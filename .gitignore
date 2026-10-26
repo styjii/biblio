@@ -1,0 +1,26 @@
+# --- Secrets : jeton d'accès et mot de passe de suppression ---
+.env
+.env.*
+!.env.example
+*.env
+!*.env.example
+
+# Fichiers temporaires d'écriture du serveur
+.env.tmp
+*.env.tmp
+.*.fl-tmp
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# --- Éditeurs et système ---
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db

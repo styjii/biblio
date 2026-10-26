@@ -11,6 +11,7 @@ import shutil
 import stat
 import subprocess
 import threading
+import time
 from html import escape
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +23,9 @@ ROOT = Path(os.environ.get("BIBLIO_DOCS", Path.cwd())).resolve()
 PORT = int(os.environ.get("BIBLIO_PORT", "8088"))
 READONLY = False
 TOKEN = ""
+PASSWORD = ""      # BIBLIO_PASSWORD (.env) : vide = suppression de fichiers désactivée
+ENV_PATH = None    # fichier .env (jeton, mot de passe)
+ENV = {}           # valeurs lues dans le .env
 HERE = Path(__file__).resolve().parent
 BUNDLE = HERE / "editor.bundle.js"
 ROOT_ID = ""
@@ -114,6 +118,9 @@ ICONS = {
 
 ICONS.update({
     "library": '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+    "trash": '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>'
+             '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/>'
+             '<line x1="14" x2="14" y1="11" y2="17"/>',
     "play": '<polygon points="6 3 20 12 6 21 6 3"/>',
     "next": '<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/>',
     "prev": '<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/>',
@@ -269,7 +276,8 @@ BROWSE_JS = """
     edit:     {ic:'edit',     t:'Éditer',             d:'Éditeur de type Vim',                  u:function(f){return '/edit?f='+f;}},
     preview:  {ic:'globe',    t:'Aperçu de la page',  d:'Afficher la page web rendue',          u:function(f){return '/preview?f='+f;}},
     open:     {ic:'external', t:'Ouvrir',             d:'Afficher dans le navigateur',          u:function(f){return '/raw?f='+f;}},
-    download: {ic:'download', t:'Télécharger',        d:'Enregistrer une copie',                u:function(f){return '/raw?dl=1&f='+f;}}
+    download: {ic:'download', t:'Télécharger',        d:'Enregistrer une copie',                u:function(f){return '/raw?dl=1&f='+f;}},
+    del:      {ic:'trash',    t:'Supprimer',          d:'Protégé par mot de passe',             u:null, danger:true}
   };
   var BY = {
     video:['watch','download'], pdf:['pdf','open','download'], text:['view','edit','download'],
@@ -279,7 +287,7 @@ BROWSE_JS = """
   var wrap = document.getElementById('sheet');
   var bodyEl = document.getElementById('sh-body');
 
-  function closeSheet(){ wrap.hidden = true; document.getElementById('newdlg').hidden = true; bodyEl.innerHTML = ''; }
+  function closeSheet(){ wrap.hidden = true; document.getElementById('newdlg').hidden = true; document.getElementById('deldlg').hidden = true; bodyEl.innerHTML = ''; }
   function esc(s){ return s.replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
   function openMenu(a){
@@ -287,6 +295,7 @@ BROWSE_JS = """
     var list = (BY[kind] || ['view','edit','download']).filter(function(k){
       return !(cfg.readonly && k === 'edit');
     });
+    if (cfg.canDelete) list.push('del');
     document.getElementById('sh-title').textContent = a.dataset.title;
     document.getElementById('sh-sub').textContent = a.dataset.size;
     var ic = document.getElementById('sh-ico');
@@ -294,14 +303,50 @@ BROWSE_JS = """
     ic.className = 'ico ' + (a.dataset.icls || '');
     bodyEl.innerHTML = list.map(function(k){
       var o = OPTS[k];
-      return '<a class="opt" href="' + o.u(f) + '"><span class="ico back">' + ICO[o.ic] + '</span>' +
+      return '<a class="opt' + (o.danger ? ' danger" data-del="1' : '') + '" href="' + (o.u ? o.u(f) : '#') + '"><span class="ico back">' + ICO[o.ic] + '</span>' +
         '<span class="text"><span class="name">' + esc(o.t) + '</span><div class="sub">' + esc(o.d) + '</div></span>' +
         '<span class="go">' + ICO.chevron + '</span></a>';
     }).join('');
+    var dl = bodyEl.querySelector('[data-del]');
+    if (dl) dl.addEventListener('click', function(e){ e.preventDefault(); askDelete(a); });
     document.getElementById('newdlg').hidden = true;
+    document.getElementById('deldlg').hidden = true;
     document.getElementById('sheet-main').hidden = false;
     wrap.hidden = false;
   }
+
+  // ----- suppression (mot de passe du .env)
+  var delTarget = null;
+  function askDelete(a){
+    delTarget = a;
+    var pw = document.getElementById('delpw');
+    document.getElementById('del-name').textContent = a.dataset.title;
+    document.getElementById('delerr').textContent = '';
+    pw.value = '';
+    document.getElementById('sheet-main').hidden = true;
+    document.getElementById('deldlg').hidden = false;
+    setTimeout(function(){ pw.focus(); }, 50);
+  }
+  document.getElementById('delcancel').addEventListener('click', closeSheet);
+  document.getElementById('delform').addEventListener('submit', function(e){
+    e.preventDefault();
+    var pw = document.getElementById('delpw'), err = document.getElementById('delerr');
+    var btn = document.getElementById('delok');
+    if (!delTarget || !cfg.canDelete) return;
+    if (!pw.value) { err.textContent = 'Saisis le mot de passe.'; return; }
+    btn.disabled = true; err.textContent = '';
+    fetch('/delete?f=' + delTarget.dataset.f, {
+      method: 'POST',
+      headers: {'X-Requested-With': 'biblio', 'Content-Type': 'text/plain; charset=utf-8'},
+      body: pw.value
+    }).then(function(r){ return r.json().then(function(j){ return {s: r.status, j: j}; }); })
+      .then(function(x){
+        btn.disabled = false;
+        if (!x.j.ok) { err.textContent = x.j.error || ('Erreur ' + x.s); pw.value = ''; pw.focus(); return; }
+        location.reload();
+      })
+      .catch(function(){ btn.disabled = false; err.textContent = 'Échec réseau, rien n\\u2019a été supprimé.'; });
+  });
 
   document.querySelectorAll('.fcard').forEach(function(a){
     a.addEventListener('click', function(e){
@@ -323,6 +368,7 @@ BROWSE_JS = """
   if (nb) {
     nb.addEventListener('click', function(){
       document.getElementById('sheet-main').hidden = true;
+      document.getElementById('deldlg').hidden = true;
       document.getElementById('newdlg').hidden = false;
       wrap.hidden = false;
       var inp = document.getElementById('newname');
@@ -688,12 +734,18 @@ body:not(.show-hidden) .dot{display:none}
 .sheet-head .name{font-size:16px}
 #sh-body,.sheet form{display:flex; flex-direction:column; gap:10px}
 .opt .ico{width:40px; height:40px}
-.sheet input[type=text]{
+.sheet input[type=text],.sheet input[type=password]{
   width:100%; padding:12px 14px; font:inherit; color:var(--text); background:var(--surface);
   border:1px solid var(--border); border-radius:12px; outline:none;
 }
-.sheet input[type=text]:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+.sheet input[type=text]:focus,.sheet input[type=password]:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
 .err{color:var(--syn-var); font-size:13px; min-height:1.2em}
+.sheet .ico.danger,.sheet .opt.danger .ico{background:var(--red-soft); color:var(--red)}
+.opt.danger:hover{border-color:var(--red)}
+.opt.danger:hover .go{color:var(--red)}
+.pill.danger{background:var(--red); border-color:var(--red); color:#fff}
+.pill.danger:hover{filter:brightness(1.08); color:#fff}
+.pill:disabled{opacity:.6; pointer-events:none}
 @media(min-width:700px){
   .sheet{bottom:auto; top:50%; transform:translateY(-50%); border-radius:22px; animation:fade .15s}
 }
@@ -873,7 +925,19 @@ def resolve_inside(rel):
         p.relative_to(ROOT)
     except ValueError:
         return None
+    if is_env_file(p):
+        return None
     return p
+
+
+def is_env_file(p):
+    """Vrai si p est le .env (ou un lien vers lui) : il contient le jeton et le mot de passe."""
+    if ENV_PATH is None:
+        return False
+    try:
+        return p.samefile(ENV_PATH)
+    except OSError:
+        return False
 
 
 def rel_of(p):
@@ -930,7 +994,7 @@ def list_dir(current):
     except (PermissionError, OSError):
         return None, None
     folders = [p for p in entries if p.is_dir()]  # is_dir() suit les liens symboliques
-    files = [p for p in entries if p.is_file()]
+    files = [p for p in entries if p.is_file() and not is_env_file(p)]
     return folders, files
 
 
@@ -983,26 +1047,98 @@ def lan_ips():
         return []
 
 
+def read_env(path):
+    """Lit un fichier .env (CLE=valeur, # commentaires, guillemets facultatifs)."""
+    values = {}
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return values
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        key, _, val = line.partition("=")
+        key, val = key.strip(), val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+            val = val[1:-1]
+        if key:
+            values[key] = val
+    return values
+
+
+def write_env_value(path, key, value):
+    """Ajoute ou remplace CLE=valeur dans le .env (écriture atomique, droits 0600)."""
+    try:
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+    except OSError:
+        lines = []
+    new = f"{key}={value}"
+    pattern = re.compile(rf"\s*(export\s+)?{re.escape(key)}\s*=")
+    for i, line in enumerate(lines):
+        if pattern.match(line):
+            lines[i] = new
+            break
+    else:
+        lines.append(new)
+    tmp = path.with_name(path.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
+def conf(key):
+    """Variable d'environnement si définie, sinon valeur du .env."""
+    return os.environ.get(key) or ENV.get(key) or ""
+
+
 def load_token():
-    env = os.environ.get("BIBLIO_TOKEN")
-    if env:
-        return env
-    cfg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "biblio"
-    f = cfg / "token"
+    """Jeton d'accès : BIBLIO_TOKEN (environnement ou .env). Absent, il est créé et écrit dans le .env."""
+    value = conf("BIBLIO_TOKEN")
+    if value:
+        return value
+    # Migration : ancien emplacement ~/.config/biblio/token
     try:
-        value = f.read_text().strip()
-        if value:
-            return value
-    except OSError:
-        pass
-    value = secrets.token_urlsafe(12)
+        legacy = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "biblio" / "token"
+        value = legacy.read_text().strip()
+    except (OSError, RuntimeError):
+        value = ""
+    value = value or secrets.token_urlsafe(12)
     try:
-        cfg.mkdir(parents=True, exist_ok=True)
-        f.write_text(value + "\n")
-        os.chmod(f, 0o600)
-    except OSError:
-        pass
+        write_env_value(ENV_PATH, "BIBLIO_TOKEN", value)
+    except OSError as e:
+        print(f"Attention : impossible d'écrire {ENV_PATH} ({e.strerror}) : le jeton ne sera pas conservé.")
     return value
+
+
+MAX_FAILS = 5          # essais de mot de passe avant verrouillage
+LOCK_SECONDS = 60
+_auth_lock = threading.Lock()
+_auth_fails = {}       # ip -> (essais, verrouillé jusqu'à)
+
+
+def check_password(ip, given):
+    """Vérifie le mot de passe de suppression, avec verrouillage par adresse IP. -> (ok, message)"""
+    now = time.monotonic()
+    with _auth_lock:
+        count, until = _auth_fails.get(ip, (0, 0.0))
+        if until > now:
+            return False, f"Trop d'essais, réessaie dans {int(until - now) + 1} s."
+        if until:                       # verrou expiré : on repart de zéro
+            count = 0
+        count += 1                      # l'essai est compté avant la vérification (essais parallèles)
+        _auth_fails[ip] = (count, now + LOCK_SECONDS if count >= MAX_FAILS else 0.0)
+    ok = bool(PASSWORD) and hmac.compare_digest(given.encode("utf-8", "replace"), PASSWORD.encode("utf-8", "replace"))
+    if ok:
+        with _auth_lock:
+            _auth_fails.pop(ip, None)
+        return True, ""
+    time.sleep(0.5)                     # ralentit les essais successifs
+    return False, "Mot de passe incorrect."
 
 
 _bundle_cache = {}
@@ -1376,13 +1512,16 @@ class FileHandler(BaseHTTPRequestHandler):
         req = urlsplit(self.path)
         q = parse_qs(req.query)
         try:
-            if req.path != "/save":
+            if req.path not in ("/save", "/delete"):
                 self.send_error(404)
                 return
             if not self.has_cookie() or self.headers.get("X-Requested-With") != "biblio":
                 self.send_json({"ok": False, "error": "Non autorisé"}, 403)
                 return
-            self.route_save(q)
+            if req.path == "/delete":
+                self.route_delete(q)
+            else:
+                self.route_save(q)
         except (BrokenPipeError, ConnectionResetError):
             pass
 
@@ -1494,9 +1633,18 @@ class FileHandler(BaseHTTPRequestHandler):
             "autocomplete='off' autocapitalize='off' spellcheck='false'>"
             "<div id='newerr' class='err'></div>"
             f"<button class='pill primary' type='submit' style='justify-content:center'>{icon('edit', 16)}Créer et éditer</button>"
+            "</form></div>"
+            "<div id='deldlg' hidden><div class='sheet-head'><div class='ico back danger'>"
+            f"{icon('trash', 22)}</div><div class='text'><div class='name'>Supprimer ce fichier ?</div>"
+            "<div class='sub' id='del-name'></div></div>"
+            f"<button class='ibtn' data-close type='button' aria-label='Fermer'>{icon('close', 18)}</button></div>"
+            "<form id='delform'><input id='delpw' type='password' placeholder='Mot de passe' autocomplete='off'>"
+            "<div id='delerr' class='err'></div>"
+            f"<button id='delok' class='pill danger' type='submit' style='justify-content:center'>{icon('trash', 16)}Supprimer définitivement</button>"
+            "<button id='delcancel' class='pill' type='button' style='justify-content:center'>Annuler</button>"
             "</form></div></div></div>")
 
-        cfg = {"readonly": READONLY, "folder": relative.as_posix() if relative.parts else ""}
+        cfg = {"readonly": READONLY, "canDelete": bool(PASSWORD) and not READONLY, "folder": relative.as_posix() if relative.parts else ""}
         icons_js = {n: icon(n, 22) for n in ICONS}
         parts.append(f"<script>window.FLCFG = {js_json(cfg)}; window.ICO = {js_json(icons_js)};"
                      f"{THEME_JS}{DECORATE_JS}{BROWSE_JS}</script></body></html>")
@@ -1903,6 +2051,44 @@ class FileHandler(BaseHTTPRequestHandler):
         self.send_json({"ok": True, "mtime": str(p.stat().st_mtime_ns), "enc": enc,
                         "lines": text.count("\n") + 1})
 
+    def route_delete(self, q):
+        """POST /delete?f=<chemin> ; corps : mot de passe (BIBLIO_PASSWORD du .env)."""
+        if READONLY:
+            self.send_json({"ok": False, "error": "Mode lecture seule"}, 403)
+            return
+        if not PASSWORD:
+            self.send_json({"ok": False, "error": "Suppression désactivée : BIBLIO_PASSWORD absent du .env"}, 403)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = -1
+        if length < 0 or length > 1024:
+            self.send_json({"ok": False, "error": "Requête invalide"}, 400)
+            return
+        given = self.rfile.read(length).decode("utf-8", "replace")
+        ok, msg = check_password(self.client_address[0], given)
+        if not ok:
+            self.send_json({"ok": False, "error": msg}, 429 if msg.startswith("Trop") else 403)
+            return
+
+        p = resolve_inside(q.get("f", [""])[0])
+        if p is None or p == ROOT:
+            self.send_json({"ok": False, "error": "Chemin non autorisé"}, 403)
+            return
+        if not os.path.lexists(p):
+            self.send_json({"ok": False, "error": "Fichier introuvable"}, 404)
+            return
+        if p.is_dir():                  # dossier réel ou raccourci vers un dossier
+            self.send_json({"ok": False, "error": "Les dossiers ne peuvent pas être supprimés"}, 400)
+            return
+        try:
+            os.unlink(p)                # sur un lien symbolique, supprime le lien et non sa cible
+        except OSError as e:
+            self.send_json({"ok": False, "error": e.strerror or "Suppression impossible"}, 500)
+            return
+        self.send_json({"ok": True})
+
 
 def find_pdfjs(cli):
     candidates = [cli] if cli else []
@@ -1917,13 +2103,14 @@ def find_pdfjs(cli):
 
 
 def main():
-    global ROOT, PORT, READONLY, TOKEN, ROOT_ID, PDFJS_DIR
+    global ROOT, PORT, READONLY, TOKEN, ROOT_ID, PDFJS_DIR, PASSWORD, ENV_PATH
 
     parser = argparse.ArgumentParser(description="Bibliothèque : documents, vidéos, texte et code")
     parser.add_argument("dossier", nargs="?", default=str(ROOT),
                         help="dossier à servir (défaut : dossier courant)")
     parser.add_argument("-p", "--port", type=int, default=PORT)
     parser.add_argument("-r", "--readonly", action="store_true", help="désactive l'édition")
+    parser.add_argument("-e", "--env", help="fichier .env : BIBLIO_TOKEN, BIBLIO_PASSWORD (défaut : .env à côté de server.py)")
     parser.add_argument("-j", "--pdfjs", help="dossier contenant legacy/web/viewer.html (pdf.js)")
     args = parser.parse_args()
 
@@ -1932,11 +2119,26 @@ def main():
     READONLY = args.readonly
     if not ROOT.is_dir():
         parser.error(f"dossier introuvable : {ROOT}")
+    ENV_PATH = Path(args.env or os.environ.get("BIBLIO_ENV") or HERE / ".env").expanduser().resolve()
+    ENV.update(read_env(ENV_PATH))
+    PASSWORD = conf("BIBLIO_PASSWORD")
     TOKEN = load_token()
     ROOT_ID = hashlib.sha1(str(ROOT).encode()).hexdigest()[:8]
     PDFJS_DIR = find_pdfjs(args.pdfjs)
 
     print(f"Bibliothèque : {ROOT}" + ("  (lecture seule)" if READONLY else ""))
+    print(f"Configuration : {ENV_PATH}")
+    if READONLY:
+        pass
+    elif PASSWORD:
+        print("Suppression de fichiers : activée (mot de passe du .env).")
+    else:
+        print("Suppression de fichiers : désactivée (définis BIBLIO_PASSWORD dans le .env).")
+    try:
+        if ENV_PATH.stat().st_mode & 0o077:
+            print(f"Attention : {ENV_PATH.name} est lisible par d'autres utilisateurs (chmod 600 recommandé).")
+    except OSError:
+        pass
     if not BUNDLE.is_file():
         print(f"Attention : {BUNDLE.name} introuvable à côté de server.py, la lecture et l'édition de texte ne fonctionneront pas.")
     if not FFMPEG:
