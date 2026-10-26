@@ -863,10 +863,15 @@ def js_json(obj):
 
 
 def resolve_inside(rel):
+    """Chemin *logique* sous ROOT : les liens symboliques ne sont pas résolus, de sorte
+    qu'un raccourci vers un dossier se comporte comme un vrai dossier (même hors de ROOT).
+    Seuls les « .. » et les chemins absolus sont neutralisés, de façon purement lexicale."""
+    if "\x00" in rel:
+        return None
+    p = Path(os.path.normpath(ROOT / rel))
     try:
-        p = (ROOT / rel).resolve()
         p.relative_to(ROOT)
-    except (ValueError, OSError):
+    except ValueError:
         return None
     return p
 
@@ -924,7 +929,7 @@ def list_dir(current):
         entries = sorted(current.iterdir(), key=natural_key)
     except (PermissionError, OSError):
         return None, None
-    folders = [p for p in entries if p.is_dir() and not p.is_symlink()]
+    folders = [p for p in entries if p.is_dir()]  # is_dir() suit les liens symboliques
     files = [p for p in entries if p.is_file()]
     return folders, files
 
@@ -1880,12 +1885,14 @@ class FileHandler(BaseHTTPRequestHandler):
         except UnicodeEncodeError:
             enc, data = "utf-8", text.encode("utf-8")
 
-        tmp = p.with_name(f".{p.name}.fl-tmp")
+        # Si le fichier est lui-même un lien, on écrit dans sa cible (sans remplacer le lien).
+        real = Path(os.path.realpath(p)) if p.is_symlink() else p
+        tmp = real.with_name(f".{real.name}.fl-tmp")
         try:
             tmp.write_bytes(data)
             if exists:
                 os.chmod(tmp, stat.S_IMODE(p.stat().st_mode))
-            os.replace(tmp, p)
+            os.replace(tmp, real)
         except OSError as e:
             try:
                 tmp.unlink()
