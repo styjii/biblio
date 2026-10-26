@@ -10,11 +10,13 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import socket
 import stat
 import subprocess
 import threading
 import time
+from collections import deque
 from html import escape
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -1418,6 +1420,7 @@ def short_ua(ua):
 
 def track_device(ip, ua, authed, hit=True):
     """Enregistre le passage d'un appareil. authed : a présenté le jeton d'accès (cookie), mémorisé."""
+    global _hist_dirty
     now = time.time()
     with _dev_lock:
         d = _devices.get(ip)
@@ -1430,6 +1433,7 @@ def track_device(ip, ua, authed, hit=True):
         d["auth"] = d["auth"] or bool(authed)
         if hit:
             d["hits"] += 1
+            _hist_dirty = True
 
 
 def is_blocked(ip):
@@ -1559,6 +1563,254 @@ def read_memory():
     used = total - avail
     return {"total": total, "used": used, "free": avail, "percent": round(used * 100 / total, 1),
             "total_h": fmt_size(total), "used_h": fmt_size(used), "free_h": fmt_size(avail)}
+
+
+# --- stockage ---------------------------------------------------------------------
+DISKS = [("/mnt/ext0", "Disque externe"), ("/sdcard", "Stockage interne")]   # BIBLIO_DISKS=chemin=Nom;chemin=Nom
+
+
+def parse_disks(text):
+    disks = []
+    for item in text.split(";"):
+        path, _, label = item.partition("=")
+        path = path.strip()
+        if path:
+            disks.append((path, label.strip() or path))
+    return disks
+
+
+def read_disks():
+    """Capacité de chaque volume configuré (octets), ou un message d'erreur s'il est illisible."""
+    out = []
+    for path, label in DISKS:
+        row = {"path": path, "label": label}
+        try:
+            u = shutil.disk_usage(path)
+        except FileNotFoundError:
+            row["error"] = "Introuvable (non monté ?)"
+        except PermissionError:
+            row["error"] = "Accès refusé"
+        except OSError as e:
+            row["error"] = e.strerror or "Illisible"
+        else:
+            row.update(total=u.total, used=u.used, free=u.free,
+                       percent=round(u.used * 100 / u.total, 1) if u.total else 0.0,
+                       total_h=fmt_size(u.total), used_h=fmt_size(u.used), free_h=fmt_size(u.free))
+            try:   # même volume que « / » : le disque n'est probablement pas monté
+                row["system"] = os.stat(path).st_dev == os.stat("/").st_dev and os.path.realpath(path) != "/"
+            except OSError:
+                row["system"] = False
+        out.append(row)
+    return out
+
+
+# --- historique des actions par appareil ---------------------------------------------------
+ACTIVITY_CATS = [   # (identifiant, libellé, couleur)
+    ("video", "Vidéos", "var(--pink)"),
+    ("audio", "Audio", "var(--teal)"),
+    ("pdf", "PDF", "var(--accent)"),
+    ("text", "Texte et code", "var(--folder)"),
+    ("web", "Navigation web", "var(--green)"),
+    ("image", "Images", "var(--orange)"),
+    ("browse", "Dossiers", "var(--muted)"),
+    ("download", "Téléchargements", "var(--red)"),
+    ("edit", "Modifications", "#9b6bd6"),
+]
+KIND_CATS = {"video": "video", "audio": "audio", "pdf": "pdf", "image": "image", "web": "web",
+             "text": "text", "binary": "download"}
+ACTIVITY_GAP = {"video": 300, "audio": 300}   # secondes sans requête avant de compter une nouvelle action
+DEFAULT_GAP = 90
+HISTORY_DAYS = 30                  # durée de conservation
+HISTORY_MAX = 3000                 # actions gardées par appareil
+HISTORY_PATH = BLOCKLIST_PATH.with_name("history.json")
+HISTORY_RANGES = {"24h": (24 * 3600, 900), "7d": (7 * 24 * 3600, 3600), "30d": (30 * 24 * 3600, 6 * 3600)}
+_history = {}                      # ip -> deque de [début, fin, catégorie, fichier, octets, requêtes]
+_hist_dirty = False
+
+
+def classify(path, q):
+    """Requête -> (catégorie, fichier) si c'est une action de l'utilisateur, sinon None
+    (miniatures, sous-titres, ressources pdf.js, tableau de bord… ne comptent pas)."""
+    def arg(name):
+        return q.get(name, [""])[0]
+
+    if path == "/":
+        return None if arg("token") else ("browse", arg("folder") or "/")
+    if path == "/view":
+        return "text", arg("f")
+    if path == "/edit":
+        return "edit", arg("f")
+    if path == "/watch":
+        return "video", arg("f")
+    if path == "/pdf":
+        return "pdf", arg("f")
+    if path == "/preview":
+        return "web", arg("f")
+    if path == "/raw":
+        f = arg("f")
+        if arg("dl") == "1":
+            return "download", f
+        p = resolve_inside(f)
+        return KIND_CATS.get(kind_of(p) if p else "text", "text"), f
+    if path.startswith("/docs/"):
+        return "pdf", unquote(path[len("/docs/"):])
+    if path.startswith("/s/"):
+        parts = path.split("/", 3)    # le jeton (parts[2]) n'est jamais conservé
+        return "web", unquote(parts[3]) if len(parts) > 3 else ""
+    if path in ("/save", "/delete"):
+        return "edit", arg("f")
+    if path == "/upload":
+        return "edit", (arg("d") + "/" + arg("n")).strip("/")
+    return None
+
+
+def record_event(ip, cat, file):
+    """Ajoute une action à l'historique ; les requêtes rapprochées sur un même fichier (flux vidéo
+    découpé en plages, par exemple) sont fusionnées en une seule action. -> entrée modifiable."""
+    global _hist_dirty
+    now = time.time()
+    gap = ACTIVITY_GAP.get(cat, DEFAULT_GAP)
+    file = file[:300]
+    with _dev_lock:
+        h = _history.get(ip)
+        if h is None:
+            h = _history[ip] = deque(maxlen=HISTORY_MAX)
+        for i, e in enumerate(reversed(h)):
+            if i >= 8:
+                break
+            if e[2] == cat and e[3] == file and now - e[1] <= gap:
+                e[1] = now
+                e[5] += 1
+                _hist_dirty = True
+                return e
+        e = [now, now, cat, file, 0, 1]
+        h.append(e)
+        _hist_dirty = True
+        return e
+
+
+def add_bytes(entry, n):
+    if entry is not None and n:
+        with _dev_lock:
+            entry[4] += n
+
+
+def save_history():
+    """Écrit appareils + historique (atomique, droits 0600) après avoir purgé ce qui est trop ancien."""
+    global _hist_dirty
+    cutoff = time.time() - HISTORY_DAYS * 86400
+    with _dev_lock:
+        for ip in list(_history):
+            h = _history[ip]
+            while h and h[0][1] < cutoff:
+                h.popleft()
+            if not h:
+                del _history[ip]
+        for ip in [ip for ip, d in _devices.items() if d["last"] < cutoff and ip not in _blocked]:
+            del _devices[ip]
+        data = {"devices": {ip: dict(d) for ip, d in _devices.items()},
+                "history": {ip: [list(e) for e in h] for ip, h in _history.items()}}
+        _hist_dirty = False
+    try:
+        HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = HISTORY_PATH.with_name(HISTORY_PATH.name + ".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, separators=(",", ":"))
+        os.replace(tmp, HISTORY_PATH)
+    except OSError:
+        _hist_dirty = True      # nouvel essai au prochain passage
+
+
+def load_history():
+    try:
+        data = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+        devices, history = data.get("devices", {}), data.get("history", {})
+    except (OSError, ValueError, AttributeError):
+        return
+    cats = {c[0] for c in ACTIVITY_CATS}
+    with _dev_lock:
+        for ip, d in devices.items():
+            try:
+                ipaddress.ip_address(ip)
+                _devices[ip] = {"first": float(d["first"]), "last": float(d["last"]), "hits": int(d["hits"]),
+                                "ua": str(d.get("ua", ""))[:60], "auth": bool(d.get("auth"))}
+            except (ValueError, KeyError, TypeError, AttributeError):
+                continue
+        for ip, items in history.items():
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError:
+                continue
+            h = deque(maxlen=HISTORY_MAX)
+            for e in items if isinstance(items, list) else []:
+                try:
+                    if e[2] in cats:
+                        h.append([float(e[0]), float(e[1]), e[2], str(e[3])[:300], int(e[4]), int(e[5])])
+                except (IndexError, ValueError, TypeError):
+                    continue
+            if h:
+                _history[ip] = h
+
+
+def _on_term(signum, frame):
+    raise SystemExit(0)     # kill / arrêt du système : passe par le « finally » qui enregistre l'historique
+
+
+def history_flusher():
+    while True:
+        time.sleep(120)
+        if _hist_dirty:
+            save_history()
+
+
+def history_report(ip, rng):
+    """Courbes, totaux, fichiers les plus consultés et liste récente pour un appareil (ou « all »)."""
+    span, step = HISTORY_RANGES.get(rng, HISTORY_RANGES["24h"])
+    n = span // step
+    now = time.time()
+    start = (int(now // step) + 1) * step - span
+    series = {c[0]: {"actions": [0] * n, "bytes": [0] * n, "seconds": [0.0] * n} for c in ACTIVITY_CATS}
+    totals = {c[0]: {"actions": 0, "bytes": 0, "seconds": 0.0} for c in ACTIVITY_CATS}
+    with _dev_lock:
+        sources = _history.items() if ip == "all" else [(ip, _history.get(ip, ()))]
+        rows = [(dev, tuple(e)) for dev, h in sources for e in h if e[1] >= start]
+    top = {}
+    for dev, (s, e, cat, file, nbytes, reqs) in rows:
+        if cat not in series:
+            continue
+        idx = int((s - start) // step)
+        if 0 <= idx < n:
+            series[cat]["actions"][idx] += 1
+            series[cat]["bytes"][idx] += nbytes
+            totals[cat]["actions"] += 1
+            totals[cat]["bytes"] += nbytes
+            if cat != "browse" and file:
+                t = top.setdefault((cat, file), [0, 0.0, 0])
+                t[0] += 1
+                t[1] += e - s
+                t[2] += nbytes
+        a, b = max(s, start), min(e, start + span)
+        if b > a:    # durée répartie sur les tranches recouvertes
+            for i in range(int((a - start) // step), min(int((b - start) // step), n - 1) + 1):
+                part = min(b, start + (i + 1) * step) - max(a, start + i * step)
+                if part > 0:
+                    series[cat]["seconds"][i] += part
+                    totals[cat]["seconds"] += part
+    for cat in list(series):
+        series[cat]["seconds"] = [round(v) for v in series[cat]["seconds"]]
+        totals[cat]["seconds"] = round(totals[cat]["seconds"])
+        if not (totals[cat]["actions"] or totals[cat]["seconds"] or totals[cat]["bytes"]):
+            del series[cat], totals[cat]
+    top_rows = sorted(top.items(), key=lambda kv: (-kv[1][0], -kv[1][1]))[:8]
+    recent = sorted(rows, key=lambda r: -r[1][1])[:100]
+    return {
+        "ok": True, "ip": ip, "range": rng if rng in HISTORY_RANGES else "24h", "start": start, "step": step, "n": n,
+        "series": series, "totals": totals,
+        "top": [{"cat": k[0], "file": k[1], "n": v[0], "seconds": round(v[1]), "bytes": v[2]} for k, v in top_rows],
+        "recent": [{"ip": dev, "t": s, "end": e, "cat": cat, "file": file, "bytes": nb, "n": reqs}
+                   for dev, (s, e, cat, file, nb, reqs) in recent],
+    }
 
 
 _bundle_cache = {}
@@ -1783,16 +2035,19 @@ DASH_CSS = """
 .dash-head{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
 .dash-title{margin:0; font-size:24px; letter-spacing:-.01em}
 .stats{display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.stats.disks{grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
 .stat{padding:14px 16px; border-radius:14px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow)}
 .stat .label{font-size:12.5px; font-weight:600; color:var(--muted)}
 .stat .value{margin-top:4px; font-size:24px; font-weight:700; letter-spacing:-.01em}
+.stat .meter{margin-top:10px}
 .meter{height:10px; margin-top:14px; border-radius:99px; background:var(--bg-2); overflow:hidden}
 .meter span{display:block; height:100%; width:0; border-radius:99px; background:var(--green); transition:width .4s,background .3s}
 .meter span.warn{background:var(--orange)}
 .meter span.crit{background:var(--red)}
-.dev{display:flex; align-items:center; gap:14px; padding:12px 14px; border-radius:14px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow)}
+.dev{display:flex; flex-wrap:wrap; align-items:center; gap:14px; padding:12px 14px; border-radius:14px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow)}
 .dev.blocked{border-color:var(--red); background:var(--red-soft)}
-.dev .text{flex:1; min-width:0; overflow-wrap:anywhere}
+.dev .text{flex:1; min-width:160px; overflow-wrap:anywhere}
+.dev-actions{display:flex; flex-wrap:wrap; gap:8px}
 .dev .ico.danger{background:var(--red-soft); color:var(--red)}
 .dev-top{display:flex; flex-wrap:wrap; align-items:center; gap:8px}
 .ip{font:600 15px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
@@ -1801,6 +2056,37 @@ DASH_CSS = """
 .tag.bad{background:var(--red-soft); color:var(--red)}
 .pill.danger{color:var(--red); border-color:var(--red)}
 .pill.danger:hover{background:var(--red-soft); color:var(--red)}
+.hbar{display:flex; flex-wrap:wrap; gap:10px; margin:12px 0 0}
+.hbar select{max-width:100%; padding:7px 14px; font:inherit; font-size:14px; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:99px}
+.hcard{margin-top:12px; padding:14px 16px; border-radius:14px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow)}
+.hcard h3{margin:0 0 10px; font-size:14px; font-weight:700}
+.chart{display:block; width:100%; height:auto}
+.chart .grid{stroke:var(--border); stroke-width:1}
+.chart .axis{fill:var(--muted); font-size:10px}
+.chart .area{fill-opacity:.88}
+.chart .cursor{stroke:var(--text); stroke-width:1; stroke-dasharray:3 3; visibility:hidden}
+.chart .hit{fill:transparent; touch-action:pan-y}
+.h-read{min-height:20px; margin-top:6px}
+.h-legend{display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:10px; font-size:13px}
+.sw{display:inline-block; width:10px; height:10px; margin-right:6px; border-radius:3px; vertical-align:-1px}
+.h-grid{display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.h-grid .hcard{margin-top:12px}
+.donut{display:block; width:150px; height:150px; margin:0 auto}
+.donut .ring{fill:none; stroke:var(--bg-2); stroke-width:5}
+.donut .seg{fill:none; stroke-width:5}
+.donut .dtot{fill:var(--text); font-size:5px; font-weight:700}
+.share{display:grid; gap:4px; margin-top:12px; font-size:13px}
+.share div{display:flex; justify-content:space-between; gap:10px}
+.top-row{margin:10px 0}
+.top-row .name{font-weight:600; overflow-wrap:anywhere}
+.top-row .bar{height:6px; margin-top:6px; border-radius:99px; background:var(--bg-2); overflow:hidden}
+.top-row .bar span{display:block; height:100%; border-radius:99px}
+.h-list{max-height:380px; overflow:auto}
+.h-item{display:grid; grid-template-columns:auto 1fr; gap:2px 12px; padding:8px 0; border-top:1px solid var(--border); font-size:13px}
+.h-item:first-child{border-top:0}
+.h-item .when{color:var(--muted); white-space:nowrap}
+.h-item .what{overflow-wrap:anywhere}
+.h-item .meta{grid-column:2; color:var(--muted); font-size:12px}
 .dash-login .ico{margin:0 auto 12px; width:56px; height:56px; border-radius:16px}
 .dash-login form{display:flex; flex-wrap:wrap; justify-content:center; gap:10px; margin-top:16px}
 .dash-login input{
@@ -1849,6 +2135,7 @@ DASH_JS = """
     if (text !== undefined && text !== null) e.textContent = text;
     return e;
   }
+  function pct(p){ return String(p).replace('.', ','); }
   function ago(s){
     if (s === null) return 'pas vu depuis le démarrage';
     if (s < 5) return "à l'instant";
@@ -1857,6 +2144,40 @@ DASH_JS = """
     if (s < 86400) return 'il y a ' + Math.floor(s / 3600) + ' h';
     return 'il y a ' + Math.floor(s / 86400) + ' j';
   }
+  function fmtBytes(n){
+    var u = [['Go', 1073741824], ['Mo', 1048576], ['Ko', 1024]];
+    for (var i = 0; i < u.length; i++) {
+      if (n >= u[i][1]) {
+        var v = n / u[i][1];
+        return (v < 10 ? v.toFixed(1) : String(Math.round(v))).replace('.', ',') + ' ' + u[i][0];
+      }
+    }
+    return Math.round(n) + ' o';
+  }
+  function fmtDur(s){
+    s = Math.round(s);
+    if (s < 60) return s + ' s';
+    var m = Math.floor(s / 60);
+    if (m < 60) return m + ' min';
+    var h = Math.floor(m / 60);
+    m = m % 60;
+    return h + ' h' + (m ? ' ' + ('0' + m).slice(-2) : '');
+  }
+  function fmtMetric(v, metric){
+    return metric === 'bytes' ? fmtBytes(v) : (metric === 'seconds' ? fmtDur(v) : String(Math.round(v)));
+  }
+  function niceFor(v, metric){
+    if (!(v > 0)) return metric === 'actions' ? 4 : 1;
+    if (metric === 'actions') return Math.max(4, Math.ceil(v / 4) * 4);
+    var div = 1;
+    if (metric === 'bytes') div = v >= 1073741824 ? 1073741824 : (v >= 1048576 ? 1048576 : (v >= 1024 ? 1024 : 1));
+    else div = v >= 3600 ? 3600 : (v >= 60 ? 60 : 1);
+    var x = v / div, p = Math.pow(10, Math.floor(Math.log(x) / Math.LN10)), m = x / p;
+    return (m <= 1 ? 1 : (m <= 2 ? 2 : (m <= 5 ? 5 : 10))) * p * div;
+  }
+  function f1(x){ return x.toFixed(1); }
+
+  /* ---------- appareils ---------- */
   function act(ip, block){
     if (block && !confirm('Bloquer ' + ip + ' ? Cet appareil n\\'aura plus accès à la bibliothèque.')) return;
     fetch('/dashboard/' + (block ? 'block' : 'unblock') + '?ip=' + encodeURIComponent(ip), {
@@ -1895,14 +2216,23 @@ DASH_JS = """
     t.appendChild(el('div', 'sub', bits.join(' · ')));
     r.appendChild(ic);
     r.appendChild(t);
+    var acts = el('div', 'dev-actions');
+    var hb = el('button', 'pill', 'Historique');
+    hb.type = 'button';
+    hb.addEventListener('click', function(){ openHistory(v.ip); });
+    acts.appendChild(hb);
     if (!v.me && !v.local) {
       var b = el('button', 'pill' + (v.blocked ? '' : ' danger'), v.blocked ? 'Débloquer' : 'Bloquer');
       b.type = 'button';
       b.addEventListener('click', function(){ act(v.ip, !v.blocked); });
-      r.appendChild(b);
+      acts.appendChild(b);
     }
+    r.appendChild(acts);
     return r;
   }
+
+  /* ---------- mémoire et stockage ---------- */
+  function meterClass(p){ return p >= 90 ? 'crit' : (p >= 70 ? 'warn' : ''); }
   function memory(m){
     $('mem').hidden = !m;
     $('mem-na').hidden = !!m;
@@ -1912,12 +2242,236 @@ DASH_JS = """
     $('m-total').textContent = m.total_h;
     var bar = $('meter-bar');
     bar.style.width = m.percent + '%';
-    bar.className = m.percent >= 90 ? 'crit' : (m.percent >= 70 ? 'warn' : '');
-    $('m-pct').textContent = String(m.percent).replace('.', ',') + ' % utilisée · libre = mémoire disponible (cache récupérable inclus)';
+    bar.className = meterClass(m.percent);
+    $('m-pct').textContent = pct(m.percent) + ' % utilisée · libre = mémoire disponible (cache récupérable inclus)';
   }
+  function disks(list){
+    var box = $('disks');
+    box.textContent = '';
+    $('disks-sec').hidden = !list.length;
+    list.forEach(function(k){
+      var c = el('div', 'stat');
+      var head = el('div', 'dev-top');
+      head.appendChild(el('span', 'label', k.label));
+      head.appendChild(el('span', 'tag', k.path));
+      if (k.system) {
+        var w = el('span', 'tag bad', 'Même volume que le système');
+        w.title = 'Ce chemin ne semble pas être un disque monté séparément';
+        head.appendChild(w);
+      }
+      c.appendChild(head);
+      if (k.error) {
+        c.appendChild(el('div', 'sub', k.error));
+      } else {
+        c.appendChild(el('div', 'value', k.free_h + ' libres'));
+        var m = el('div', 'meter');
+        var s = el('span', meterClass(k.percent));
+        s.style.width = k.percent + '%';
+        m.appendChild(s);
+        c.appendChild(m);
+        c.appendChild(el('div', 'sub', k.used_h + ' utilisés sur ' + k.total_h + ' (' + pct(k.percent) + ' %)'));
+      }
+      box.appendChild(c);
+    });
+  }
+
+  /* ---------- historique et analyse ---------- */
+  var hsel = $('h-dev'), hrange = $('h-range'), hmetric = $('h-metric');
+  var hdata = null, hseq = 0, devKey = '';
+  function catOf(id){
+    for (var i = 0; i < I.cats.length; i++) if (I.cats[i].id === id) return I.cats[i];
+    return {id: id, label: id, color: 'var(--muted)'};
+  }
+  function syncDevices(list){
+    var key = list.map(function(v){ return v.ip; }).join(',');
+    if (key === devKey) return;
+    devKey = key;
+    var cur = hsel.value;
+    hsel.textContent = '';
+    var o = el('option', null, 'Tous les appareils');
+    o.value = 'all';
+    hsel.appendChild(o);
+    list.forEach(function(v){
+      var op = el('option', null, v.ip + (v.ua ? ' · ' + v.ua : '') + (v.me ? ' (cet appareil)' : ''));
+      op.value = v.ip;
+      hsel.appendChild(op);
+    });
+    hsel.value = cur;
+    if (!hsel.value) hsel.value = 'all';
+  }
+  function openHistory(ip){
+    hsel.value = ip;
+    if (!hsel.value) hsel.value = 'all';
+    loadHistory();
+    $('hist').scrollIntoView({behavior: 'smooth'});
+  }
+  function loadHistory(){
+    var my = ++hseq;
+    fetch('/dashboard/history?ip=' + encodeURIComponent(hsel.value || 'all') + '&range=' + hrange.value,
+          {credentials: 'same-origin', cache: 'no-store'})
+      .then(function(r){
+        if (r.status === 401) { location.reload(); return null; }
+        return r.json();
+      })
+      .then(function(d){ if (d && d.ok && my === hseq) { hdata = d; drawHistory(); } })
+      .catch(function(){});
+  }
+  function timeLabel(t, long){
+    var d = new Date(t * 1000);
+    if (long) return d.toLocaleString('fr-FR', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+    if (hdata && hdata.range === '24h') return d.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'});
+    return d.toLocaleDateString('fr-FR', {day: 'numeric', month: 'short'});
+  }
+  function curve(cats, d, metric){
+    var n = d.n, W = 640, Hh = 220, L = 50, R = 8, T = 10, B = 24, pw = W - L - R, ph = Hh - T - B, i;
+    var tot = [];
+    for (i = 0; i < n; i++) tot.push(0);
+    cats.forEach(function(c){ d.series[c.id][metric].forEach(function(v, k){ tot[k] += v; }); });
+    var max = niceFor(Math.max.apply(null, tot), metric);
+    var x = function(k){ return L + (n > 1 ? k * pw / (n - 1) : pw / 2); };
+    var y = function(v){ return T + ph - v / max * ph; };
+    var out = '<svg viewBox="0 0 ' + W + ' ' + Hh + '" class="chart" role="img" aria-label="Courbe d activité">';
+    for (var g = 0; g <= 4; g++) {
+      var gy = y(max * g / 4);
+      out += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + f1(gy) + '" y2="' + f1(gy) + '"/>'
+           + '<text class="axis" x="' + (L - 6) + '" y="' + f1(gy + 3.5) + '" text-anchor="end">' + fmtMetric(max * g / 4, metric) + '</text>';
+    }
+    var base = [];
+    for (i = 0; i < n; i++) base.push(0);
+    cats.forEach(function(c){
+      var vals = d.series[c.id][metric], up = [], p, k;
+      for (k = 0; k < n; k++) up.push(base[k] + vals[k]);
+      p = 'M' + f1(x(0)) + ' ' + f1(y(base[0]));
+      for (k = 0; k < n; k++) p += ' L' + f1(x(k)) + ' ' + f1(y(up[k]));
+      for (k = n - 1; k >= 0; k--) p += ' L' + f1(x(k)) + ' ' + f1(y(base[k]));
+      out += '<path class="area" d="' + p + 'Z" style="fill:' + c.color + '"/>';
+      base = up;
+    });
+    [0, 0.25, 0.5, 0.75, 1].forEach(function(f, k){
+      var idx = Math.round(f * (n - 1));
+      out += '<text class="axis" x="' + f1(x(idx)) + '" y="' + (Hh - 6) + '" text-anchor="'
+           + (k === 0 ? 'start' : (k === 4 ? 'end' : 'middle')) + '">' + timeLabel(d.start + idx * d.step, false) + '</text>';
+    });
+    out += '<line class="cursor" x1="0" x2="0" y1="' + T + '" y2="' + (T + ph) + '"/>'
+         + '<rect class="hit" x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '"/></svg>';
+    var box = $('h-curve');
+    box.innerHTML = out;
+    var svg = box.firstChild, cur = svg.querySelector('.cursor'), hit = svg.querySelector('.hit');
+    function at(ev){
+      var r = svg.getBoundingClientRect();
+      var px = (ev.clientX - r.left) / r.width * W;
+      var k = Math.max(0, Math.min(n - 1, Math.round((px - L) / pw * (n - 1))));
+      cur.setAttribute('x1', f1(x(k)));
+      cur.setAttribute('x2', f1(x(k)));
+      cur.style.visibility = 'visible';
+      var parts = [];
+      cats.forEach(function(c){
+        var v = d.series[c.id][metric][k];
+        if (v) parts.push(c.label + ' ' + fmtMetric(v, metric));
+      });
+      $('h-read').textContent = timeLabel(d.start + k * d.step, true) + ' : ' + (parts.length ? parts.join(' · ') : 'aucune activité');
+    }
+    hit.addEventListener('pointermove', at);
+    hit.addEventListener('pointerdown', at);
+    $('h-read').textContent = 'Touche ou survole la courbe pour le détail.';
+    var lg = $('h-legend');
+    lg.textContent = '';
+    cats.forEach(function(c){
+      var s = el('span', null, c.label + ' ');
+      var sw = el('span', 'sw');
+      sw.style.background = c.color;
+      s.insertBefore(sw, s.firstChild);
+      s.appendChild(el('b', null, fmtMetric(d.totals[c.id][metric], metric)));
+      lg.appendChild(s);
+    });
+  }
+  function donut(cats, d, metric){
+    var tot = 0;
+    cats.forEach(function(c){ tot += d.totals[c.id][metric]; });
+    var out = '<svg viewBox="0 0 42 42" class="donut" role="img" aria-label="Répartition par catégorie">'
+            + '<circle cx="21" cy="21" r="15.9155" class="ring"/>';
+    var off = 25;
+    var share = $('h-share');
+    share.textContent = '';
+    cats.forEach(function(c){
+      var v = d.totals[c.id][metric];
+      if (!v || !tot) return;
+      var p = v / tot * 100;
+      out += '<circle cx="21" cy="21" r="15.9155" class="seg" style="stroke:' + c.color + '" stroke-dasharray="'
+           + p.toFixed(2) + ' ' + (100 - p).toFixed(2) + '" stroke-dashoffset="' + off.toFixed(2) + '"/>';
+      off -= p;
+      var line = el('div');
+      var left = el('span', null, c.label);
+      var sw = el('span', 'sw');
+      sw.style.background = c.color;
+      left.insertBefore(sw, left.firstChild);
+      line.appendChild(left);
+      line.appendChild(el('b', null, Math.round(p) + ' %'));
+      share.appendChild(line);
+    });
+    out += '<text x="21" y="22.8" text-anchor="middle" class="dtot">' + fmtMetric(tot, metric) + '</text></svg>';
+    $('h-donut').innerHTML = out;
+  }
+  function topFiles(d){
+    var box = $('h-top');
+    box.textContent = '';
+    if (!d.top.length) { box.appendChild(el('div', 'sub', 'Aucun fichier consulté.')); return; }
+    var max = d.top[0].n;
+    d.top.forEach(function(t){
+      var c = catOf(t.cat);
+      var r = el('div', 'top-row');
+      r.appendChild(el('div', 'name', t.file));
+      var bits = [c.label, t.n + ' fois'];
+      if (t.seconds >= 5) bits.push(fmtDur(t.seconds));
+      if (t.bytes) bits.push(fmtBytes(t.bytes));
+      r.appendChild(el('div', 'sub', bits.join(' · ')));
+      var bar = el('div', 'bar');
+      var s = el('span');
+      s.style.width = Math.max(4, t.n / max * 100) + '%';
+      s.style.background = c.color;
+      bar.appendChild(s);
+      r.appendChild(bar);
+      box.appendChild(r);
+    });
+  }
+  function recent(d){
+    var box = $('h-list');
+    box.textContent = '';
+    d.recent.forEach(function(e){
+      var c = catOf(e.cat);
+      var r = el('div', 'h-item');
+      r.appendChild(el('span', 'when', timeLabel(e.t, true)));
+      var what = el('span', 'what');
+      var sw = el('span', 'sw');
+      sw.style.background = c.color;
+      what.appendChild(sw);
+      what.appendChild(document.createTextNode(c.label + ' · ' + (e.file || '/')));
+      r.appendChild(what);
+      var bits = [];
+      if (e.end - e.t >= 5) bits.push(fmtDur(e.end - e.t));
+      if (e.bytes) bits.push(fmtBytes(e.bytes));
+      if (d.ip === 'all') bits.push(e.ip);
+      if (bits.length) r.appendChild(el('span', 'meta', bits.join(' · ')));
+      box.appendChild(r);
+    });
+  }
+  function drawHistory(){
+    var d = hdata, metric = hmetric.value;
+    var cats = I.cats.filter(function(c){ return d.series[c.id]; });
+    $('h-empty').hidden = cats.length > 0;
+    $('h-body').hidden = cats.length === 0;
+    if (!cats.length) return;
+    curve(cats, d, metric);
+    donut(cats, d, metric);
+    topFiles(d);
+    recent(d);
+  }
+
+  /* ---------- actualisation ---------- */
   function render(d){
     $('host').textContent = d.host;
     memory(d.memory);
+    disks(d.disks || []);
     $('n-active').textContent = d.active;
     $('dev-sub').textContent = d.active + (d.active > 1 ? ' appareils connectés' : ' appareil connecté')
       + ' (activité depuis moins de ' + Math.round(d.window / 60) + ' min) · ' + d.blocked
@@ -1926,6 +2480,7 @@ DASH_JS = """
     list.textContent = '';
     d.devices.forEach(function(v){ list.appendChild(row(v)); });
     if (!d.devices.length) list.appendChild(el('div', 'empty', 'Aucun appareil pour le moment.'));
+    syncDevices(d.devices);
   }
   var busy = false;
   function load(){
@@ -1949,9 +2504,14 @@ DASH_JS = """
     fetch('/dashboard/logout', {method: 'POST', headers: H, credentials: 'same-origin'})
       .then(function(){ location.reload(); });
   });
-  document.addEventListener('visibilitychange', function(){ if (!document.hidden) load(); });
+  hsel.addEventListener('change', loadHistory);
+  hrange.addEventListener('change', loadHistory);
+  hmetric.addEventListener('change', function(){ if (hdata) drawHistory(); });
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) { load(); loadHistory(); } });
   setInterval(function(){ if (!document.hidden) load(); }, 3000);
+  setInterval(function(){ if (!document.hidden) loadHistory(); }, 15000);
   load();
+  loadHistory();
 })();
 """
 
@@ -1969,6 +2529,8 @@ def dashboard_page(unlocked):
             "<p id='err' class='dash-err' role='alert' hidden></p></div></main>"
             f"<script>{THEME_JS}{DASH_LOGIN_JS}</script></body></html>")
         return "".join(parts)
+    cfg = {"monitor": icon("monitor", 22), "ban": icon("ban", 22),
+           "cats": [{"id": i, "label": label, "color": color} for i, label, color in ACTIVITY_CATS]}
     parts.append(
         "<main class='dash'>"
         "<div class='dash-head'><div><h1 class='dash-title'>Tableau de bord</h1>"
@@ -1981,11 +2543,26 @@ def dashboard_page(unlocked):
         "<div class='stat'><div class='label'>Totale</div><div class='value' id='m-total'>–</div></div></div>"
         "<div class='meter'><span id='meter-bar'></span></div><div class='sub' id='m-pct'></div></div>"
         "<div class='empty' id='mem-na' hidden>Mémoire indisponible sur ce système.</div></section>"
+        "<section class='section' id='disks-sec' hidden><h2>Stockage</h2><div class='stats disks' id='disks'></div></section>"
         "<section class='section'><h2>Appareils connectés <span class='count' id='n-active'>0</span></h2>"
         "<div class='sub' id='dev-sub'></div><div class='list' id='devices' style='margin-top:12px'></div></section>"
-        "</main>"
-        f"<script>window.DCFG = {js_json({'monitor': icon('monitor', 22), 'ban': icon('ban', 22)})}; "
-        f"{THEME_JS}{DASH_JS}</script></body></html>")
+        "<section class='section' id='hist'><h2>Historique et analyse</h2>"
+        "<div class='hbar'>"
+        "<select id='h-dev' aria-label='Appareil'><option value='all'>Tous les appareils</option></select>"
+        "<select id='h-range' aria-label='Période'><option value='24h'>24 heures</option>"
+        "<option value='7d'>7 jours</option><option value='30d'>30 jours</option></select>"
+        "<select id='h-metric' aria-label='Mesure'><option value='actions'>Actions</option>"
+        "<option value='seconds'>Durée d'activité</option><option value='bytes'>Données transférées</option></select></div>"
+        "<div class='empty' id='h-empty' hidden>Aucune activité enregistrée sur cette période.</div>"
+        "<div id='h-body' hidden>"
+        "<div class='hcard'><h3>Activité dans le temps</h3><div id='h-curve'></div>"
+        "<div class='sub h-read' id='h-read'></div><div class='h-legend' id='h-legend'></div></div>"
+        "<div class='h-grid'>"
+        "<div class='hcard'><h3>Répartition</h3><div id='h-donut'></div><div class='share' id='h-share'></div></div>"
+        "<div class='hcard'><h3>Fichiers les plus consultés</h3><div id='h-top'></div></div></div>"
+        "<div class='hcard'><h3>Historique des actions</h3><div class='h-list' id='h-list'></div></div></div>"
+        "</section></main>"
+        f"<script>window.DCFG = {js_json(cfg)}; {THEME_JS}{DASH_JS}</script></body></html>")
     return "".join(parts)
 
 
@@ -1997,6 +2574,7 @@ DASH_POSTS = ("/dashboard/login", "/dashboard/logout", "/dashboard/block", "/das
 
 class FileHandler(BaseHTTPRequestHandler):
     server_version = "Biblio/1.0"
+    _entry = None      # action d'historique de la requête en cours (voir parse_request)
 
     # ----- réponses
     def send_bytes(self, content, ctype, status=200, extra=None):
@@ -2008,6 +2586,7 @@ class FileHandler(BaseHTTPRequestHandler):
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(content)
+        add_bytes(self._entry, len(content))
 
     def send_html(self, html, status=200):
         self.send_bytes(html.encode("utf-8"), "text/html; charset=utf-8", status,
@@ -2064,6 +2643,7 @@ class FileHandler(BaseHTTPRequestHandler):
                     if not chunk:
                         break
                     self.wfile.write(chunk)
+                    add_bytes(self._entry, len(chunk))
                     remaining -= len(chunk)
         except (BrokenPipeError, ConnectionResetError):
             pass
@@ -2077,8 +2657,19 @@ class FileHandler(BaseHTTPRequestHandler):
             self.close_connection = True
             self.send_html(message_page("Accès bloqué", "Cet appareil a été bloqué par l'administrateur."), 403)
             return False
-        track_device(ip, self.headers.get("User-Agent", ""), self.has_cookie(),
-                     hit=not self.path.startswith("/dashboard/data"))
+        req = urlsplit(self.path)
+        authed = self.has_cookie()
+        track_device(ip, self.headers.get("User-Agent", ""), authed, hit=not req.path.startswith("/dashboard/"))
+        self._entry = None
+        if not req.path.startswith("/dashboard"):
+            if req.path.startswith("/s/"):     # les aperçus web s'authentifient par le jeton dans l'URL
+                parts = req.path.split("/", 3)
+                authed = authed or (len(parts) > 2 and hmac.compare_digest(
+                    unquote(parts[2]).encode("utf-8", "replace"), TOKEN.encode()))
+            if authed:
+                action = classify(req.path, parse_qs(req.query))
+                if action:
+                    self._entry = record_event(ip, *action)
         return True
 
     # ----- authentification
@@ -2160,6 +2751,8 @@ class FileHandler(BaseHTTPRequestHandler):
                 self.page_dashboard()
             elif path == "/dashboard/data":
                 self.route_dash_data()
+            elif path == "/dashboard/history":
+                self.route_dash_history(q)
             elif path.startswith("/docs/"):
                 self.route_docs(path)
             elif path.startswith(("/legacy/", "/build/", "/web/")):
@@ -2795,10 +3388,23 @@ class FileHandler(BaseHTTPRequestHandler):
             return
         rows = device_rows(self.client_address[0])
         self.send_json({
-            "ok": True, "host": socket.gethostname(), "memory": read_memory(), "devices": rows,
+            "ok": True, "host": socket.gethostname(), "memory": read_memory(), "disks": read_disks(), "devices": rows,
             "active": sum(1 for r in rows if r["active"]), "blocked": sum(1 for r in rows if r["blocked"]),
             "window": DEVICE_ACTIVE_SECONDS,
         })
+
+    def route_dash_history(self, q):
+        if not use_dash_session(self.dash_session_id(), touch=False):
+            self.send_json({"ok": False, "error": "Session expirée"}, 401)
+            return
+        ip = q.get("ip", ["all"])[0]
+        if ip != "all":
+            try:
+                ip = str(ipaddress.ip_address(ip))
+            except ValueError:
+                self.send_json({"ok": False, "error": "Adresse IP invalide."}, 400)
+                return
+        self.send_json(history_report(ip, q.get("range", ["24h"])[0]))
 
     def route_dash_post(self, path, q):
         """POST /dashboard/login (corps : mot de passe), /logout, /block?ip=…, /unblock?ip=…"""
@@ -2989,7 +3595,7 @@ def find_pdfjs(cli):
 
 
 def main():
-    global ROOT, PORT, READONLY, TOKEN, ROOT_ID, PDFJS_DIR, PASSWORD, DASH_PASSWORD, ENV_PATH, MAX_UPLOAD
+    global ROOT, PORT, READONLY, TOKEN, ROOT_ID, PDFJS_DIR, PASSWORD, DASH_PASSWORD, DISKS, ENV_PATH, MAX_UPLOAD
 
     parser = argparse.ArgumentParser(description="Bibliothèque : documents, vidéos, texte et code")
     parser.add_argument("dossier", nargs="?", default=str(ROOT),
@@ -3009,6 +3615,8 @@ def main():
     ENV.update(read_env(ENV_PATH))
     PASSWORD = conf("BIBLIO_PASSWORD")
     DASH_PASSWORD = conf("BIBLIO_DASHBOARD_PASSWORD") or PASSWORD
+    if conf("BIBLIO_DISKS"):
+        DISKS = parse_disks(conf("BIBLIO_DISKS"))
     TOKEN = load_token()
     try:
         MAX_UPLOAD = max(0, int(conf("BIBLIO_MAX_UPLOAD_MB") or 4096)) * 1024 * 1024
@@ -3017,6 +3625,9 @@ def main():
     ROOT_ID = hashlib.sha1(str(ROOT).encode()).hexdigest()[:8]
     LOCAL_IPS.update(lan_ips())
     load_blocklist()
+    load_history()
+    threading.Thread(target=history_flusher, daemon=True).start()
+    signal.signal(signal.SIGTERM, _on_term)
     PDFJS_DIR = find_pdfjs(args.pdfjs)
 
     print(f"Bibliothèque : {ROOT}" + ("  (lecture seule)" if READONLY else ""))
@@ -3053,6 +3664,8 @@ def main():
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nArrêt.")
+    finally:
+        save_history()
 
 
 if __name__ == "__main__":
