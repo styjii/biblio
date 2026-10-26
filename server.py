@@ -1,4 +1,5 @@
 import argparse
+import errno
 import gzip
 import hashlib
 import hmac
@@ -26,6 +27,10 @@ TOKEN = ""
 PASSWORD = ""      # BIBLIO_PASSWORD (.env) : vide = suppression de fichiers désactivée
 ENV_PATH = None    # fichier .env (jeton, mot de passe)
 ENV = {}           # valeurs lues dans le .env
+MAX_UPLOAD = 4096 * 1024 * 1024   # taille max d'un fichier envoyé (BIBLIO_MAX_UPLOAD_MB, 0 = illimité)
+UPLOAD_CHUNK = 1024 * 1024
+UPLOAD_MIN_FREE = 64 * 1024 * 1024    # espace disque à toujours laisser libre
+DRAIN_MAX = 512 * 1024 * 1024         # corps d'une requête refusée que l'on accepte de lire et jeter
 HERE = Path(__file__).resolve().parent
 BUNDLE = HERE / "editor.bundle.js"
 ROOT_ID = ""
@@ -118,6 +123,8 @@ ICONS = {
 
 ICONS.update({
     "library": '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+    "upload": '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/>'
+              '<line x1="12" x2="12" y1="3" y2="15"/>',
     "trash": '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>'
              '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/>'
              '<line x1="14" x2="14" y1="11" y2="17"/>',
@@ -287,7 +294,14 @@ BROWSE_JS = """
   var wrap = document.getElementById('sheet');
   var bodyEl = document.getElementById('sh-body');
 
-  function closeSheet(){ wrap.hidden = true; document.getElementById('newdlg').hidden = true; document.getElementById('deldlg').hidden = true; bodyEl.innerHTML = ''; }
+  var upRunning = false, upDirty = false;
+  function closeSheet(){
+    if (upRunning) return;
+    var reload = upDirty;
+    wrap.hidden = true; document.getElementById('newdlg').hidden = true; document.getElementById('deldlg').hidden = true;
+    document.getElementById('updlg').hidden = true; bodyEl.innerHTML = '';
+    if (reload) location.reload();
+  }
   function esc(s){ return s.replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
   function openMenu(a){
@@ -362,6 +376,139 @@ BROWSE_JS = """
 
   wrap.querySelectorAll('[data-close]').forEach(function(el){ el.addEventListener('click', closeSheet); });
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !wrap.hidden) closeSheet(); });
+
+  // ----- envoi de fichiers, vidéos et dossiers (mot de passe du .env)
+  var upBtn = document.getElementById('uploadbtn');
+  if (upBtn) {
+    var upTicket = null, upExpire = 0, upTtl = 0, upCancel = false, upXhr = null;
+    var upEl = function(id){ return document.getElementById(id); };
+    var upWarn = function(e){ e.preventDefault(); e.returnValue = ''; };
+    var fmtB = function(n){
+      var u = ['o', 'Ko', 'Mo', 'Go', 'To'], i = 0;
+      while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+      return (i ? n.toFixed(n < 10 ? 1 : 0).replace('.', ',') : n) + ' ' + u[i];
+    };
+    var upShow = function(step){
+      ['upform', 'uppick', 'uprun'].forEach(function(id){ upEl(id).hidden = (id !== step); });
+    };
+
+    upBtn.addEventListener('click', function(){
+      upEl('sheet-main').hidden = true; upEl('newdlg').hidden = true; upEl('deldlg').hidden = true;
+      upEl('updlg').hidden = false; wrap.hidden = false;
+      upEl('up-dest').textContent = '/' + (cfg.folder || '');
+      upEl('uperr').textContent = ''; upEl('uppw').value = '';
+      if (upTicket && Date.now() < upExpire) upShow('uppick');
+      else { upShow('upform'); setTimeout(function(){ upEl('uppw').focus(); }, 50); }
+    });
+
+    upEl('upform').addEventListener('submit', function(e){
+      e.preventDefault();
+      var pw = upEl('uppw'), err = upEl('uperr'), b = upEl('upok');
+      if (!pw.value) { err.textContent = 'Saisis le mot de passe.'; return; }
+      b.disabled = true; err.textContent = '';
+      fetch('/upload-auth', {
+        method: 'POST',
+        headers: {'X-Requested-With': 'biblio', 'Content-Type': 'text/plain; charset=utf-8'},
+        body: pw.value
+      }).then(function(r){ return r.json().then(function(j){ return {s: r.status, j: j}; }); })
+        .then(function(x){
+          b.disabled = false; pw.value = '';
+          if (!x.j.ok) { err.textContent = x.j.error || ('Erreur ' + x.s); pw.focus(); return; }
+          upTicket = x.j.ticket; upTtl = x.j.ttl * 1000; upExpire = Date.now() + upTtl - 30000;
+          upShow('uppick');
+        })
+        .catch(function(){ b.disabled = false; err.textContent = 'Échec réseau.'; });
+    });
+
+    upEl('up-pick-files').addEventListener('click', function(e){ e.preventDefault(); upEl('up-in-files').click(); });
+    upEl('up-pick-dir').addEventListener('click', function(e){ e.preventDefault(); upEl('up-in-dir').click(); });
+    ['up-in-files', 'up-in-dir'].forEach(function(id){
+      upEl(id).addEventListener('change', function(){
+        var files = Array.prototype.slice.call(this.files);
+        this.value = '';
+        if (files.length) upStart(files);
+      });
+    });
+
+    upEl('up-cancel').addEventListener('click', function(){ upCancel = true; if (upXhr) upXhr.abort(); });
+    upEl('up-done').addEventListener('click', function(){ upRunning = false; closeSheet(); });
+
+    var upStart = function(files){
+      var over = upEl('upover').checked, max = cfg.maxUpload || 0;
+      var items = files.map(function(f){ return {f: f, rel: f.webkitRelativePath || f.name}; });
+      var total = 0;
+      var list = upEl('up-list');
+      list.innerHTML = '';
+      items.forEach(function(it){
+        total += it.f.size;
+        var row = document.createElement('div'); row.className = 'uprow';
+        var n = document.createElement('span'); n.className = 'n'; n.textContent = it.rel;
+        var s = document.createElement('span'); s.className = 's'; s.textContent = fmtB(it.f.size);
+        row.appendChild(n); row.appendChild(s); list.appendChild(row);
+        it.row = row; it.s = s;
+      });
+      upShow('uprun');
+      upEl('up-done').hidden = true; upEl('up-cancel').hidden = false;
+      upEl('up-bar').style.width = '0%';
+      upRunning = true; upCancel = false;
+      window.addEventListener('beforeunload', upWarn);
+
+      var i = 0, sent = 0, ok = 0, skipped = 0, failed = 0;
+      var setBar = function(bytes){
+        var p = total ? Math.min(100, bytes / total * 100) : 100;
+        upEl('up-bar').style.width = p + '%';
+        upEl('up-sum').textContent = (ok + skipped + failed) + ' / ' + items.length + ' · ' + fmtB(Math.min(bytes, total)) + ' sur ' + fmtB(total);
+      };
+      var mark = function(it, cls, txt){ it.row.className = 'uprow ' + cls; it.s.textContent = txt; };
+      var finish = function(msg){
+        upRunning = false;
+        window.removeEventListener('beforeunload', upWarn);
+        upEl('up-cancel').hidden = true; upEl('up-done').hidden = false;
+        upEl('up-bar').style.width = (msg ? upEl('up-bar').style.width : '100%');
+        upEl('up-sum').textContent = ok + ' envoyé(s)' + (skipped ? ' · ' + skipped + ' déjà présent(s)' : '') +
+          (failed ? ' · ' + failed + ' en échec' : '') + (msg ? ' · ' + msg : '');
+        if (ok) upDirty = true;
+      };
+      var next = function(){
+        if (upCancel) return finish('arrêté');
+        if (i >= items.length) return finish('');
+        var it = items[i++];
+        if (max && it.f.size > max) {
+          failed++; sent += it.f.size; mark(it, 'bad', 'trop volumineux (max ' + fmtB(max) + ')');
+          setBar(sent); return next();
+        }
+        mark(it, 'run', '0 %');
+        var x = new XMLHttpRequest();
+        upXhr = x;
+        x.open('POST', '/upload?d=' + encodeURIComponent(cfg.folder || '') + '&n=' + encodeURIComponent(it.rel) + (over ? '&o=1' : ''));
+        x.setRequestHeader('X-Requested-With', 'biblio');
+        x.setRequestHeader('X-Upload-Ticket', upTicket);
+        x.setRequestHeader('Content-Type', 'application/octet-stream');
+        x.upload.onprogress = function(e){
+          if (!e.lengthComputable) return;
+          mark(it, 'run', Math.round(e.loaded / e.total * 100) + ' %');
+          setBar(sent + e.loaded);
+        };
+        x.onload = function(){
+          var j = {};
+          try { j = JSON.parse(x.responseText); } catch(err) {}
+          sent += it.f.size;
+          if (x.status === 200 && j.ok) { ok++; mark(it, 'ok', '✓ ' + fmtB(it.f.size)); upExpire = Date.now() + upTtl - 30000; }
+          else if (x.status === 409) { skipped++; mark(it, 'skip', j.error || 'déjà présent'); }
+          else if (j.code === 'ticket') {
+            failed++; upTicket = null; mark(it, 'bad', 'session expirée');
+            return finish('mot de passe à saisir à nouveau (rouvre « Envoyer »)');
+          }
+          else { failed++; mark(it, 'bad', j.error || ('erreur ' + x.status)); }
+          setBar(sent); next();
+        };
+        x.onabort = function(){ mark(it, 'bad', 'arrêté'); next(); };
+        x.onerror = function(){ failed++; mark(it, 'bad', 'échec réseau'); finish('connexion perdue'); };
+        x.send(it.f);
+      };
+      next();
+    };
+  }
 
   // ----- nouveau fichier
   var nb = document.getElementById('newfile');
@@ -746,6 +893,17 @@ body:not(.show-hidden) .dot{display:none}
 .pill.danger{background:var(--red); border-color:var(--red); color:#fff}
 .pill.danger:hover{filter:brightness(1.08); color:#fff}
 .pill:disabled{opacity:.6; pointer-events:none}
+#uppick,#uprun{display:flex; flex-direction:column; gap:10px}
+.upbar{height:8px; border-radius:99px; background:var(--surface); border:1px solid var(--border); overflow:hidden}
+.upbar i{display:block; height:100%; width:0; background:var(--accent); transition:width .15s}
+.uplist{max-height:34vh; overflow:auto; display:flex; flex-direction:column; gap:4px; font-size:13px}
+.uprow{display:flex; justify-content:space-between; gap:12px; padding:2px 4px}
+.uprow .n{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0}
+.uprow .s{flex:none; color:var(--muted)}
+.uprow.run .s{color:var(--accent)}
+.uprow.ok .s{color:var(--green)}
+.uprow.skip .s{color:var(--orange)}
+.uprow.bad .s{color:var(--red)}
 @media(min-width:700px){
   .sheet{bottom:auto; top:50%; transform:translateY(-50%); border-radius:22px; animation:fade .15s}
 }
@@ -1141,6 +1299,49 @@ def check_password(ip, given):
     return False, "Mot de passe incorrect."
 
 
+TICKET_TTL = 15 * 60       # durée de validité d'un jeton d'envoi (fenêtre glissante)
+_tickets = {}              # jeton d'envoi -> expiration (monotonic)
+_tickets_lock = threading.Lock()
+
+
+def issue_ticket():
+    """Jeton d'envoi à usage limité (obtenu avec le mot de passe, valable pour /upload uniquement)."""
+    now = time.monotonic()
+    with _tickets_lock:
+        for t in [t for t, exp in _tickets.items() if exp < now]:
+            del _tickets[t]
+        while len(_tickets) >= 50:
+            del _tickets[min(_tickets, key=_tickets.get)]
+        ticket = secrets.token_urlsafe(24)
+        _tickets[ticket] = now + TICKET_TTL
+    return ticket
+
+
+def use_ticket(ticket):
+    """Vrai si le jeton est valide ; sa validité est alors prolongée."""
+    now = time.monotonic()
+    with _tickets_lock:
+        exp = _tickets.get(ticket)
+        if exp is None or exp < now:
+            _tickets.pop(ticket, None)
+            return False
+        _tickets[ticket] = now + TICKET_TTL
+    return True
+
+
+def clean_upload_name(name):
+    """Nom relatif envoyé par le navigateur (« dossier/sous/fichier.ext ») -> composants sûrs, ou None."""
+    if not name or len(name) > 1024 or name.startswith("/"):
+        return None
+    parts = name.split("/")
+    for c in parts:
+        if c in ("", ".", "..") or "\\" in c or len(c.encode("utf-8", "replace")) > 200:
+            return None
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in c):
+            return None
+    return parts
+
+
 _bundle_cache = {}
 
 
@@ -1512,7 +1713,7 @@ class FileHandler(BaseHTTPRequestHandler):
         req = urlsplit(self.path)
         q = parse_qs(req.query)
         try:
-            if req.path not in ("/save", "/delete"):
+            if req.path not in ("/save", "/delete", "/upload-auth", "/upload"):
                 self.send_error(404)
                 return
             if not self.has_cookie() or self.headers.get("X-Requested-With") != "biblio":
@@ -1520,6 +1721,10 @@ class FileHandler(BaseHTTPRequestHandler):
                 return
             if req.path == "/delete":
                 self.route_delete(q)
+            elif req.path == "/upload-auth":
+                self.route_upload_auth()
+            elif req.path == "/upload":
+                self.route_upload(q)
             else:
                 self.route_save(q)
         except (BrokenPipeError, ConnectionResetError):
@@ -1563,6 +1768,8 @@ class FileHandler(BaseHTTPRequestHandler):
         parts.append("<div class='toolrow'>")
         if not READONLY:
             parts.append(f"<button id='newfile' class='pill primary' type='button'>{icon('plus', 16)}Nouveau fichier</button>")
+        if PASSWORD and not READONLY:
+            parts.append(f"<button id='uploadbtn' class='pill' type='button'>{icon('upload', 16)}Envoyer</button>")
         parts.append("<label class='switch'><input type='checkbox' id='toggle-hidden'>"
                      "<span class='track'></span>Fichiers cachés</label></div>")
 
@@ -1642,9 +1849,30 @@ class FileHandler(BaseHTTPRequestHandler):
             "<div id='delerr' class='err'></div>"
             f"<button id='delok' class='pill danger' type='submit' style='justify-content:center'>{icon('trash', 16)}Supprimer définitivement</button>"
             "<button id='delcancel' class='pill' type='button' style='justify-content:center'>Annuler</button>"
-            "</form></div></div></div>")
+            "</form></div>"
+            "<div id='updlg' hidden><div class='sheet-head'><div class='ico back'>"
+            f"{icon('upload', 22)}</div><div class='text'><div class='name'>Envoyer dans ce dossier</div>"
+            "<div class='sub' id='up-dest'></div></div>"
+            f"<button class='ibtn' data-close type='button' aria-label='Fermer'>{icon('close', 18)}</button></div>"
+            "<form id='upform'><input id='uppw' type='password' placeholder='Mot de passe' autocomplete='off'>"
+            "<div id='uperr' class='err'></div>"
+            "<button id='upok' class='pill primary' type='submit' style='justify-content:center'>Continuer</button></form>"
+            "<div id='uppick' hidden>"
+            "<label class='switch'><input type='checkbox' id='upover'><span class='track'></span>Remplacer les fichiers existants</label>"
+            f"<a class='opt' href='#' id='up-pick-files'><span class='ico back'>{icon('file', 22)}</span>"
+            "<span class='text'><span class='name'>Fichiers ou vidéos</span><div class='sub'>Un ou plusieurs fichiers</div></span>"
+            f"<span class='go'>{icon('chevron', 18)}</span></a>"
+            f"<a class='opt' href='#' id='up-pick-dir'><span class='ico back'>{icon('folder', 22)}</span>"
+            "<span class='text'><span class='name'>Un dossier entier</span><div class='sub'>Avec ses sous-dossiers</div></span>"
+            f"<span class='go'>{icon('chevron', 18)}</span></a>"
+            "<input id='up-in-files' type='file' multiple hidden><input id='up-in-dir' type='file' webkitdirectory hidden></div>"
+            "<div id='uprun' hidden><div class='upbar'><i id='up-bar'></i></div><div class='sub' id='up-sum'></div>"
+            "<div id='up-list' class='uplist'></div>"
+            "<button id='up-cancel' class='pill' type='button' style='justify-content:center'>Arrêter l'envoi</button>"
+            "<button id='up-done' class='pill primary' type='button' style='justify-content:center' hidden>Terminer</button></div>"
+            "</div></div></div>")
 
-        cfg = {"readonly": READONLY, "canDelete": bool(PASSWORD) and not READONLY, "folder": relative.as_posix() if relative.parts else ""}
+        cfg = {"readonly": READONLY, "canDelete": bool(PASSWORD) and not READONLY, "maxUpload": MAX_UPLOAD, "folder": relative.as_posix() if relative.parts else ""}
         icons_js = {n: icon(n, 22) for n in ICONS}
         parts.append(f"<script>window.FLCFG = {js_json(cfg)}; window.ICO = {js_json(icons_js)};"
                      f"{THEME_JS}{DECORATE_JS}{BROWSE_JS}</script></body></html>")
@@ -2089,6 +2317,147 @@ class FileHandler(BaseHTTPRequestHandler):
             return
         self.send_json({"ok": True})
 
+    # ----- envoi de fichiers (mot de passe -> jeton d'envoi -> un POST par fichier)
+    def drain(self, length):
+        """Lit et jette le corps restant : sans cela le navigateur perd la réponse d'erreur."""
+        if length < 0 or length > DRAIN_MAX:
+            self.close_connection = True
+            return
+        left = length
+        while left > 0:
+            chunk = self.rfile.read(min(UPLOAD_CHUNK, left))
+            if not chunk:
+                break
+            left -= len(chunk)
+
+    def upload_error(self, length, msg, status, code=""):
+        self.drain(length)
+        self.send_json({"ok": False, "error": msg, "code": code}, status)
+
+    def route_upload_auth(self):
+        """POST /upload-auth ; corps : mot de passe -> jeton d'envoi."""
+        if READONLY:
+            self.send_json({"ok": False, "error": "Mode lecture seule"}, 403)
+            return
+        if not PASSWORD:
+            self.send_json({"ok": False, "error": "Envoi désactivé : BIBLIO_PASSWORD absent du .env"}, 403)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = -1
+        if length < 0 or length > 1024:
+            self.send_json({"ok": False, "error": "Requête invalide"}, 400)
+            return
+        given = self.rfile.read(length).decode("utf-8", "replace")
+        ok, msg = check_password(self.client_address[0], given)
+        if not ok:
+            self.send_json({"ok": False, "error": msg}, 429 if msg.startswith("Trop") else 403)
+            return
+        self.send_json({"ok": True, "ticket": issue_ticket(), "ttl": TICKET_TTL})
+
+    def route_upload(self, q):
+        """POST /upload?d=<dossier>&n=<chemin relatif>[&o=1] ; corps : contenu du fichier (en flux)."""
+        def arg(name):
+            return q.get(name, [""])[0]
+
+        try:
+            length = int(self.headers.get("Content-Length", "-1"))
+        except ValueError:
+            length = -1
+        if length < 0:
+            self.close_connection = True
+            self.send_json({"ok": False, "error": "Content-Length requis"}, 411)
+            return
+        if READONLY:
+            return self.upload_error(length, "Mode lecture seule", 403)
+        if not PASSWORD:
+            return self.upload_error(length, "Envoi désactivé : BIBLIO_PASSWORD absent du .env", 403)
+        if not use_ticket(self.headers.get("X-Upload-Ticket", "")):
+            return self.upload_error(length, "Session d'envoi expirée : saisis à nouveau le mot de passe", 403, "ticket")
+        if MAX_UPLOAD and length > MAX_UPLOAD:
+            return self.upload_error(length, f"Fichier trop volumineux (maximum {fmt_size(MAX_UPLOAD)})", 413)
+
+        parts = clean_upload_name(arg("n"))
+        if parts is None:
+            return self.upload_error(length, "Nom de fichier invalide", 400)
+        folder = resolve_inside(arg("d"))
+        if folder is None:
+            return self.upload_error(length, "Dossier non autorisé", 403)
+        if not folder.is_dir():
+            return self.upload_error(length, "Dossier de destination introuvable", 404)
+        final = Path(os.path.normpath(folder.joinpath(*parts)))
+        try:
+            final.relative_to(ROOT)
+        except ValueError:
+            return self.upload_error(length, "Chemin non autorisé", 403)
+        if is_env_file(final):
+            return self.upload_error(length, "Chemin non autorisé", 403)
+
+        overwrite = arg("o") == "1"
+        exists = os.path.lexists(final)
+        if exists and final.is_dir():
+            return self.upload_error(length, "Un dossier porte déjà ce nom", 409)
+        if exists and not overwrite:
+            return self.upload_error(length, "Déjà présent", 409)
+
+        probe = final.parent
+        while not probe.exists() and probe != probe.parent:
+            probe = probe.parent
+        try:
+            free = shutil.disk_usage(probe).free
+        except OSError:
+            free = None
+        if free is not None and length + UPLOAD_MIN_FREE > free:
+            return self.upload_error(length, "Espace disque insuffisant", 507)
+        try:
+            os.makedirs(final.parent, exist_ok=True)
+        except OSError as e:
+            return self.upload_error(length, "Impossible de créer le dossier : " + (e.strerror or "erreur"), 409)
+
+        dest = Path(os.path.realpath(final)) if final.is_symlink() else final   # écrire dans la cible d'un lien
+        tmp = dest.with_name(f".up-{secrets.token_hex(6)}.fl-tmp")
+        received = 0
+        try:
+            with open(tmp, "wb") as f:
+                while received < length:
+                    chunk = self.rfile.read(min(UPLOAD_CHUNK, length - received))
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    received += len(chunk)
+            if received != length:               # envoi interrompu par le client
+                self.close_connection = True
+                return
+            if exists:
+                try:
+                    os.chmod(tmp, stat.S_IMODE(dest.stat().st_mode))
+                except OSError:
+                    pass
+                os.replace(tmp, dest)
+            else:
+                try:
+                    os.link(tmp, dest)           # échoue si le fichier est apparu entre-temps
+                except FileExistsError:
+                    self.send_json({"ok": False, "error": "Déjà présent"}, 409)
+                    return
+                except OSError:                  # système de fichiers sans liens physiques
+                    if os.path.lexists(dest):
+                        self.send_json({"ok": False, "error": "Déjà présent"}, 409)
+                        return
+                    os.replace(tmp, dest)
+            self.send_json({"ok": True, "name": "/".join(parts), "size": length})
+        except OSError as e:
+            full = e.errno == errno.ENOSPC
+            self.drain(max(0, length - received))
+            self.send_json({"ok": False, "error": "Espace disque insuffisant" if full else (e.strerror or "Écriture impossible")},
+                           507 if full else 500)
+        finally:
+            try:
+                os.unlink(tmp)                   # temporaire (ou second lien) : toujours nettoyé
+            except OSError:
+                pass
+
 
 def find_pdfjs(cli):
     candidates = [cli] if cli else []
@@ -2103,7 +2472,7 @@ def find_pdfjs(cli):
 
 
 def main():
-    global ROOT, PORT, READONLY, TOKEN, ROOT_ID, PDFJS_DIR, PASSWORD, ENV_PATH
+    global ROOT, PORT, READONLY, TOKEN, ROOT_ID, PDFJS_DIR, PASSWORD, ENV_PATH, MAX_UPLOAD
 
     parser = argparse.ArgumentParser(description="Bibliothèque : documents, vidéos, texte et code")
     parser.add_argument("dossier", nargs="?", default=str(ROOT),
@@ -2123,6 +2492,10 @@ def main():
     ENV.update(read_env(ENV_PATH))
     PASSWORD = conf("BIBLIO_PASSWORD")
     TOKEN = load_token()
+    try:
+        MAX_UPLOAD = max(0, int(conf("BIBLIO_MAX_UPLOAD_MB") or 4096)) * 1024 * 1024
+    except ValueError:
+        print("Attention : BIBLIO_MAX_UPLOAD_MB invalide, valeur par défaut (4096 Mo) utilisée.")
     ROOT_ID = hashlib.sha1(str(ROOT).encode()).hexdigest()[:8]
     PDFJS_DIR = find_pdfjs(args.pdfjs)
 
@@ -2131,9 +2504,10 @@ def main():
     if READONLY:
         pass
     elif PASSWORD:
-        print("Suppression de fichiers : activée (mot de passe du .env).")
+        print("Suppression et envoi de fichiers : activés (mot de passe du .env).")
+        print("Taille maximale par fichier envoyé : " + (fmt_size(MAX_UPLOAD) if MAX_UPLOAD else "illimitée") + ".")
     else:
-        print("Suppression de fichiers : désactivée (définis BIBLIO_PASSWORD dans le .env).")
+        print("Suppression et envoi de fichiers : désactivés (définis BIBLIO_PASSWORD dans le .env).")
     try:
         if ENV_PATH.stat().st_mode & 0o077:
             print(f"Attention : {ENV_PATH.name} est lisible par d'autres utilisateurs (chmod 600 recommandé).")
