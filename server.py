@@ -3,12 +3,14 @@ import errno
 import gzip
 import hashlib
 import hmac
+import ipaddress
 import json
 import mimetypes
 import os
 import re
 import secrets
 import shutil
+import socket
 import stat
 import subprocess
 import threading
@@ -25,6 +27,7 @@ PORT = int(os.environ.get("BIBLIO_PORT", "8088"))
 READONLY = False
 TOKEN = ""
 PASSWORD = ""      # BIBLIO_PASSWORD (.env) : vide = suppression de fichiers désactivée
+DASH_PASSWORD = ""   # BIBLIO_DASHBOARD_PASSWORD (.env), à défaut BIBLIO_PASSWORD : vide = tableau de bord désactivé
 ENV_PATH = None    # fichier .env (jeton, mot de passe)
 ENV = {}           # valeurs lues dans le .env
 MAX_UPLOAD = 4096 * 1024 * 1024   # taille max d'un fichier envoyé (BIBLIO_MAX_UPLOAD_MB, 0 = illimité)
@@ -132,6 +135,11 @@ ICONS.update({
     "next": '<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/>',
     "prev": '<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/>',
     "more": '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+    "dashboard": '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/>'
+                 '<rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+    "monitor": '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
+    "ban": '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+    "lock": '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
 })
 
 
@@ -1279,8 +1287,10 @@ _auth_lock = threading.Lock()
 _auth_fails = {}       # ip -> (essais, verrouillé jusqu'à)
 
 
-def check_password(ip, given):
-    """Vérifie le mot de passe de suppression, avec verrouillage par adresse IP. -> (ok, message)"""
+def check_password(ip, given, expected=None):
+    """Vérifie un mot de passe (par défaut celui de suppression), avec verrouillage par adresse IP.
+    -> (ok, message)"""
+    expected = PASSWORD if expected is None else expected
     now = time.monotonic()
     with _auth_lock:
         count, until = _auth_fails.get(ip, (0, 0.0))
@@ -1290,7 +1300,7 @@ def check_password(ip, given):
             count = 0
         count += 1                      # l'essai est compté avant la vérification (essais parallèles)
         _auth_fails[ip] = (count, now + LOCK_SECONDS if count >= MAX_FAILS else 0.0)
-    ok = bool(PASSWORD) and hmac.compare_digest(given.encode("utf-8", "replace"), PASSWORD.encode("utf-8", "replace"))
+    ok = bool(expected) and hmac.compare_digest(given.encode("utf-8", "replace"), expected.encode("utf-8", "replace"))
     if ok:
         with _auth_lock:
             _auth_fails.pop(ip, None)
@@ -1342,6 +1352,215 @@ def clean_upload_name(name):
     return parts
 
 
+# --------------------------------------------------------------------------
+# Tableau de bord : mémoire, appareils connectés, blocage
+# --------------------------------------------------------------------------
+DEVICE_ACTIVE_SECONDS = 5 * 60     # un appareil est « connecté » s'il a fait une requête depuis moins de 5 min
+MAX_DEVICES = 500                  # appareils gardés en mémoire (les plus anciens sont oubliés)
+BLOCKLIST_PATH = (Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+                  / "biblio" / "blocked_devices.json")
+LOCAL_IPS = {"127.0.0.1"}          # adresses de la machine qui héberge le serveur (remplie au démarrage)
+_dev_lock = threading.Lock()
+_devices = {}                      # ip -> {first, last, hits, ua, auth}
+_blocked = {}                      # ip -> date du blocage (time.time())
+
+DASH_TTL = 30 * 60                 # inactivité maximale d'une session du tableau de bord
+_dash_lock = threading.Lock()
+_dash_sessions = {}                # identifiant de session -> expiration (monotonic)
+
+
+def issue_dash_session():
+    now = time.monotonic()
+    with _dash_lock:
+        for s in [s for s, exp in _dash_sessions.items() if exp < now]:
+            del _dash_sessions[s]
+        while len(_dash_sessions) >= 20:
+            del _dash_sessions[min(_dash_sessions, key=_dash_sessions.get)]
+        sid = secrets.token_urlsafe(24)
+        _dash_sessions[sid] = now + DASH_TTL
+    return sid
+
+
+def use_dash_session(sid, touch=True):
+    """Vrai si la session est valide. Les actions (touch) prolongent sa validité ; l'actualisation
+    automatique de la page, non : un onglet oublié finit donc par se verrouiller."""
+    if not sid:
+        return False
+    now = time.monotonic()
+    with _dash_lock:
+        exp = _dash_sessions.get(sid)
+        if exp is None or exp < now:
+            _dash_sessions.pop(sid, None)
+            return False
+        if touch:
+            _dash_sessions[sid] = now + DASH_TTL
+    return True
+
+
+def drop_dash_session(sid):
+    with _dash_lock:
+        _dash_sessions.pop(sid, None)
+
+
+def short_ua(ua):
+    """User-Agent -> libellé court (« Chrome · Android »)."""
+    ua = ua or ""
+    browser = next((name for key, name in (
+        ("Edg/", "Edge"), ("OPR/", "Opera"), ("Firefox/", "Firefox"), ("FxiOS/", "Firefox"),
+        ("SamsungBrowser/", "Samsung Internet"), ("CriOS/", "Chrome"), ("Chrome/", "Chrome"),
+        ("Safari/", "Safari")) if key in ua), "")
+    system = next((name for key, name in (
+        ("Android", "Android"), ("iPhone", "iPhone"), ("iPad", "iPad"), ("Windows", "Windows"),
+        ("Mac OS X", "macOS"), ("CrOS", "ChromeOS"), ("Linux", "Linux")) if key in ua), "")
+    label = " · ".join(x for x in (browser, system) if x)
+    return label or ua.split("/")[0][:30]
+
+
+def track_device(ip, ua, authed, hit=True):
+    """Enregistre le passage d'un appareil. authed : a présenté le jeton d'accès (cookie), mémorisé."""
+    now = time.time()
+    with _dev_lock:
+        d = _devices.get(ip)
+        if d is None:
+            if len(_devices) >= MAX_DEVICES:
+                del _devices[min(_devices, key=lambda k: _devices[k]["last"])]
+            d = _devices[ip] = {"first": now, "hits": 0, "auth": False, "ua": ""}
+        d["last"] = now
+        d["ua"] = short_ua(ua) or d["ua"]
+        d["auth"] = d["auth"] or bool(authed)
+        if hit:
+            d["hits"] += 1
+
+
+def is_blocked(ip):
+    with _dev_lock:
+        return ip in _blocked
+
+
+def load_blocklist():
+    try:
+        data = json.loads(BLOCKLIST_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(data, list):
+        return
+    with _dev_lock:
+        for item in data:
+            try:
+                _blocked[str(ipaddress.ip_address(str(item["ip"])))] = float(item.get("since", 0))
+            except (ValueError, KeyError, TypeError, AttributeError):
+                continue
+
+
+def save_blocklist():
+    """Écrit la liste des appareils bloqués (atomique, droits 0600). À appeler avec _dev_lock tenu."""
+    data = [{"ip": ip, "since": since} for ip, since in sorted(_blocked.items())]
+    BLOCKLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = BLOCKLIST_PATH.with_name(BLOCKLIST_PATH.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    os.replace(tmp, BLOCKLIST_PATH)
+
+
+def set_blocked(ip_text, block, requester):
+    """Bloque ou débloque une adresse IP. -> (ok, erreur, avertissement)"""
+    try:
+        ip = str(ipaddress.ip_address(ip_text.strip()))
+    except ValueError:
+        return False, "Adresse IP invalide.", ""
+    if block:
+        if ip == requester:
+            return False, "Tu ne peux pas bloquer l'appareil que tu utilises.", ""
+        if ipaddress.ip_address(ip).is_loopback or ip in LOCAL_IPS or ip in lan_ips():
+            return False, "Tu ne peux pas bloquer l'appareil qui héberge le serveur.", ""
+    warning = ""
+    with _dev_lock:
+        if block:
+            _blocked[ip] = time.time()
+        else:
+            _blocked.pop(ip, None)
+        try:
+            save_blocklist()
+        except OSError as e:
+            warning = (f"Appliqué, mais la liste n'a pas pu être enregistrée dans {BLOCKLIST_PATH} "
+                       f"({e.strerror}) : elle sera perdue au redémarrage.")
+    return True, "", warning
+
+
+def arp_macs():
+    """ip -> adresse MAC d'après la table ARP du système (Linux ; vide si illisible)."""
+    macs = {}
+    try:
+        with open("/proc/net/arp", encoding="ascii", errors="replace") as f:
+            next(f, None)
+            for line in f:
+                cols = line.split()
+                if len(cols) >= 4 and cols[3] != "00:00:00:00:00:00":
+                    macs[cols[0]] = cols[3]
+    except OSError:
+        pass
+    return macs
+
+
+def device_rows(me):
+    """Appareils vus + appareils bloqués, prêts pour le JSON du tableau de bord."""
+    now = time.time()
+    macs = arp_macs()
+    with _dev_lock:
+        seen = {ip: dict(d) for ip, d in _devices.items()}
+        blocked = set(_blocked)
+    rows = []
+    for ip in set(seen) | blocked:
+        d = seen.get(ip)
+        ago = max(0, int(now - d["last"])) if d else None
+        try:
+            loopback = ipaddress.ip_address(ip).is_loopback
+        except ValueError:
+            loopback = False
+        rows.append({
+            "ip": ip, "mac": macs.get(ip, ""), "ua": d["ua"] if d else "", "ago": ago,
+            "hits": d["hits"] if d else 0, "auth": bool(d and d["auth"]),
+            "active": ago is not None and ago <= DEVICE_ACTIVE_SECONDS and ip not in blocked,
+            "blocked": ip in blocked, "me": ip == me, "local": loopback or ip in LOCAL_IPS,
+        })
+    rows.sort(key=lambda r: (r["blocked"], not r["active"], r["ago"] if r["ago"] is not None else 1 << 40, r["ip"]))
+    return rows
+
+
+def read_memory():
+    """Mémoire de l'appareil (octets) ou None. « Libre » = mémoire disponible (MemAvailable : cache
+    récupérable inclus), et non le seul MemFree, toujours très bas sous Linux."""
+    total = avail = None
+    try:
+        info = {}
+        with open("/proc/meminfo", encoding="ascii", errors="replace") as f:
+            for line in f:
+                key, _, rest = line.partition(":")
+                parts = rest.split()
+                if parts and parts[0].isdigit():
+                    info[key] = int(parts[0]) * 1024      # valeurs en Kio
+        total = info.get("MemTotal")
+        avail = info.get("MemAvailable")
+        if avail is None and total:                       # très vieux noyaux
+            avail = info.get("MemFree", 0) + info.get("Buffers", 0) + info.get("Cached", 0)
+    except OSError:
+        pass
+    if not total:
+        try:
+            page = os.sysconf("SC_PAGE_SIZE")
+            total = page * os.sysconf("SC_PHYS_PAGES")
+            avail = page * os.sysconf("SC_AVPHYS_PAGES")
+        except (ValueError, OSError, AttributeError):
+            return None
+    if not total or avail is None:
+        return None
+    avail = max(0, min(avail, total))
+    used = total - avail
+    return {"total": total, "used": used, "free": avail, "percent": round(used * 100 / total, 1),
+            "total_h": fmt_size(total), "used_h": fmt_size(used), "free_h": fmt_size(avail)}
+
+
 _bundle_cache = {}
 
 
@@ -1365,12 +1584,12 @@ def theme_button(extra=""):
     )
 
 
-def doc_open(title, body_class=""):
+def doc_open(title, body_class="", extra_css=""):
     return (
         "<!doctype html><html lang='fr'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'>"
         "<meta name='color-scheme' content='light dark'>"
-        f"<title>{escape(title)}</title>{THEME_INIT}<style>{CSS}</style></head>"
+        f"<title>{escape(title)}</title>{THEME_INIT}<style>{CSS}{extra_css}</style></head>"
         f"<body class='{body_class}'>"
     )
 
@@ -1384,7 +1603,9 @@ def topbar(with_search):
     return (
         "<header class='topbar'><a class='brand' href='/'>"
         f"<span class='logo'>{icon('library', 22)}</span><span>Ma bibliothèque</span></a>"
-        f"{search}{theme_button()}</header>"
+        f"{search}{theme_button()}"
+        "<a class='ibtn' href='/dashboard' title='Tableau de bord' aria-label='Tableau de bord'>"
+        f"{icon('dashboard', 20)}</a></header>"
     )
 
 
@@ -1558,9 +1779,222 @@ def message_page(title, text, actions=""):
     )
 
 
+DASH_CSS = """
+.dash-head{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
+.dash-title{margin:0; font-size:24px; letter-spacing:-.01em}
+.stats{display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.stat{padding:14px 16px; border-radius:14px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow)}
+.stat .label{font-size:12.5px; font-weight:600; color:var(--muted)}
+.stat .value{margin-top:4px; font-size:24px; font-weight:700; letter-spacing:-.01em}
+.meter{height:10px; margin-top:14px; border-radius:99px; background:var(--bg-2); overflow:hidden}
+.meter span{display:block; height:100%; width:0; border-radius:99px; background:var(--green); transition:width .4s,background .3s}
+.meter span.warn{background:var(--orange)}
+.meter span.crit{background:var(--red)}
+.dev{display:flex; align-items:center; gap:14px; padding:12px 14px; border-radius:14px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow)}
+.dev.blocked{border-color:var(--red); background:var(--red-soft)}
+.dev .text{flex:1; min-width:0; overflow-wrap:anywhere}
+.dev .ico.danger{background:var(--red-soft); color:var(--red)}
+.dev-top{display:flex; flex-wrap:wrap; align-items:center; gap:8px}
+.ip{font:600 15px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.tag{font-size:11.5px; font-weight:600; padding:1px 8px; border-radius:99px; background:var(--gray-soft); color:var(--muted)}
+.tag.me{background:var(--accent-soft); color:var(--accent)}
+.tag.bad{background:var(--red-soft); color:var(--red)}
+.pill.danger{color:var(--red); border-color:var(--red)}
+.pill.danger:hover{background:var(--red-soft); color:var(--red)}
+.dash-login .ico{margin:0 auto 12px; width:56px; height:56px; border-radius:16px}
+.dash-login form{display:flex; flex-wrap:wrap; justify-content:center; gap:10px; margin-top:16px}
+.dash-login input{
+  flex:1 1 220px; max-width:320px; padding:10px 16px; font:inherit; font-size:15px; color:var(--text);
+  background:var(--bg); border:1px solid var(--border); border-radius:99px; outline:none;
+}
+.dash-login input:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+.dash-login .pill{margin:0}
+.dash-err{margin:12px 0 0; color:var(--red)}
+"""
+
+DASH_LOGIN_JS = """
+(function(){
+  var f = document.getElementById('login');
+  var pwd = document.getElementById('pwd');
+  var err = document.getElementById('err');
+  var btn = document.getElementById('go');
+  function fail(msg){
+    err.textContent = msg; err.hidden = false; btn.disabled = false;
+  }
+  f.addEventListener('submit', function(e){
+    e.preventDefault();
+    btn.disabled = true; err.hidden = true;
+    fetch('/dashboard/login', {
+      method: 'POST', credentials: 'same-origin', body: pwd.value,
+      headers: {'X-Requested-With': 'biblio', 'Content-Type': 'text/plain; charset=utf-8'}
+    })
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if (j.ok) { location.reload(); return; }
+        fail(j.error || 'Erreur'); pwd.select();
+      })
+      .catch(function(){ fail('Connexion impossible.'); });
+  });
+})();
+"""
+
+DASH_JS = """
+(function(){
+  var H = {'X-Requested-With': 'biblio'};
+  var I = window.DCFG || {};
+  var $ = function(id){ return document.getElementById(id); };
+  function el(tag, cls, text){
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  }
+  function ago(s){
+    if (s === null) return 'pas vu depuis le démarrage';
+    if (s < 5) return "à l'instant";
+    if (s < 60) return 'il y a ' + s + ' s';
+    if (s < 3600) return 'il y a ' + Math.floor(s / 60) + ' min';
+    if (s < 86400) return 'il y a ' + Math.floor(s / 3600) + ' h';
+    return 'il y a ' + Math.floor(s / 86400) + ' j';
+  }
+  function act(ip, block){
+    if (block && !confirm('Bloquer ' + ip + ' ? Cet appareil n\\'aura plus accès à la bibliothèque.')) return;
+    fetch('/dashboard/' + (block ? 'block' : 'unblock') + '?ip=' + encodeURIComponent(ip), {
+      method: 'POST', headers: H, credentials: 'same-origin'
+    })
+      .then(function(r){ return r.json().then(function(j){ return {status: r.status, j: j}; }); })
+      .then(function(x){
+        if (x.status === 401) { location.reload(); return; }
+        if (!x.j.ok) alert(x.j.error || 'Erreur');
+        else if (x.j.warning) alert(x.j.warning);
+        busy = false; load();
+      })
+      .catch(function(){ alert('Connexion impossible.'); });
+  }
+  function row(v){
+    var r = el('div', 'dev' + (v.blocked ? ' blocked' : ''));
+    var ic = el('div', 'ico ' + (v.blocked ? 'danger' : 'code'));
+    ic.innerHTML = v.blocked ? I.ban : I.monitor;
+    var t = el('div', 'text');
+    var top = el('div', 'dev-top');
+    top.appendChild(el('span', 'ip', v.ip));
+    if (v.me) top.appendChild(el('span', 'tag me', 'Cet appareil'));
+    else if (v.local) top.appendChild(el('span', 'tag me', 'Serveur'));
+    if (v.blocked) top.appendChild(el('span', 'tag bad', 'Bloqué'));
+    else if (v.ago !== null && !v.auth) {
+      var w = el('span', 'tag bad', 'Sans jeton');
+      w.title = "N'a jamais présenté le jeton d'accès";
+      top.appendChild(w);
+    }
+    var bits = [];
+    if (v.ua) bits.push(v.ua);
+    if (v.mac) bits.push('MAC ' + v.mac);
+    bits.push(ago(v.ago));
+    if (v.hits) bits.push(v.hits + (v.hits > 1 ? ' requêtes' : ' requête'));
+    t.appendChild(top);
+    t.appendChild(el('div', 'sub', bits.join(' · ')));
+    r.appendChild(ic);
+    r.appendChild(t);
+    if (!v.me && !v.local) {
+      var b = el('button', 'pill' + (v.blocked ? '' : ' danger'), v.blocked ? 'Débloquer' : 'Bloquer');
+      b.type = 'button';
+      b.addEventListener('click', function(){ act(v.ip, !v.blocked); });
+      r.appendChild(b);
+    }
+    return r;
+  }
+  function memory(m){
+    $('mem').hidden = !m;
+    $('mem-na').hidden = !!m;
+    if (!m) return;
+    $('m-used').textContent = m.used_h;
+    $('m-free').textContent = m.free_h;
+    $('m-total').textContent = m.total_h;
+    var bar = $('meter-bar');
+    bar.style.width = m.percent + '%';
+    bar.className = m.percent >= 90 ? 'crit' : (m.percent >= 70 ? 'warn' : '');
+    $('m-pct').textContent = String(m.percent).replace('.', ',') + ' % utilisée · libre = mémoire disponible (cache récupérable inclus)';
+  }
+  function render(d){
+    $('host').textContent = d.host;
+    memory(d.memory);
+    $('n-active').textContent = d.active;
+    $('dev-sub').textContent = d.active + (d.active > 1 ? ' appareils connectés' : ' appareil connecté')
+      + ' (activité depuis moins de ' + Math.round(d.window / 60) + ' min) · ' + d.blocked
+      + (d.blocked > 1 ? ' bloqués' : ' bloqué');
+    var list = $('devices');
+    list.textContent = '';
+    d.devices.forEach(function(v){ list.appendChild(row(v)); });
+    if (!d.devices.length) list.appendChild(el('div', 'empty', 'Aucun appareil pour le moment.'));
+  }
+  var busy = false;
+  function load(){
+    if (busy) return;
+    busy = true;
+    fetch('/dashboard/data', {credentials: 'same-origin', cache: 'no-store'})
+      .then(function(r){
+        if (r.status === 401) { location.reload(); return null; }
+        return r.json();
+      })
+      .then(function(d){
+        if (d && d.ok) {
+          render(d);
+          $('upd').textContent = 'mis à jour à ' + new Date().toLocaleTimeString('fr-FR');
+        }
+      })
+      .catch(function(){ $('upd').textContent = 'connexion perdue, nouvel essai…'; })
+      .then(function(){ busy = false; });
+  }
+  $('lock').addEventListener('click', function(){
+    fetch('/dashboard/logout', {method: 'POST', headers: H, credentials: 'same-origin'})
+      .then(function(){ location.reload(); });
+  });
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) load(); });
+  setInterval(function(){ if (!document.hidden) load(); }, 3000);
+  load();
+})();
+"""
+
+
+def dashboard_page(unlocked):
+    parts = [doc_open("Tableau de bord — Ma bibliothèque", "", DASH_CSS), topbar(False)]
+    if not unlocked:
+        parts.append(
+            "<main><div class='msgcard dash-login'>"
+            f"<div class='ico code'>{icon('lock', 24)}</div>"
+            "<h1>Tableau de bord</h1><p>Entre le mot de passe pour continuer.</p>"
+            "<form id='login'><input id='pwd' type='password' placeholder='Mot de passe' "
+            "autocomplete='current-password' required autofocus>"
+            "<button id='go' class='pill primary' type='submit'>Déverrouiller</button></form>"
+            "<p id='err' class='dash-err' role='alert' hidden></p></div></main>"
+            f"<script>{THEME_JS}{DASH_LOGIN_JS}</script></body></html>")
+        return "".join(parts)
+    parts.append(
+        "<main class='dash'>"
+        "<div class='dash-head'><div><h1 class='dash-title'>Tableau de bord</h1>"
+        "<div class='sub'>Appareil : <strong id='host'>…</strong> · <span id='upd'>chargement…</span></div></div>"
+        f"<button id='lock' class='pill' type='button'>{icon('lock', 16)}Verrouiller</button></div>"
+        "<section class='section'><h2>Mémoire</h2>"
+        "<div id='mem'><div class='stats'>"
+        "<div class='stat'><div class='label'>Utilisée</div><div class='value' id='m-used'>–</div></div>"
+        "<div class='stat'><div class='label'>Libre</div><div class='value' id='m-free'>–</div></div>"
+        "<div class='stat'><div class='label'>Totale</div><div class='value' id='m-total'>–</div></div></div>"
+        "<div class='meter'><span id='meter-bar'></span></div><div class='sub' id='m-pct'></div></div>"
+        "<div class='empty' id='mem-na' hidden>Mémoire indisponible sur ce système.</div></section>"
+        "<section class='section'><h2>Appareils connectés <span class='count' id='n-active'>0</span></h2>"
+        "<div class='sub' id='dev-sub'></div><div class='list' id='devices' style='margin-top:12px'></div></section>"
+        "</main>"
+        f"<script>window.DCFG = {js_json({'monitor': icon('monitor', 22), 'ban': icon('ban', 22)})}; "
+        f"{THEME_JS}{DASH_JS}</script></body></html>")
+    return "".join(parts)
+
+
 # --------------------------------------------------------------------------
 # Serveur
 # --------------------------------------------------------------------------
+DASH_POSTS = ("/dashboard/login", "/dashboard/logout", "/dashboard/block", "/dashboard/unblock")
+
+
 class FileHandler(BaseHTTPRequestHandler):
     server_version = "Biblio/1.0"
 
@@ -1579,9 +2013,9 @@ class FileHandler(BaseHTTPRequestHandler):
         self.send_bytes(html.encode("utf-8"), "text/html; charset=utf-8", status,
                         {"Cache-Control": "no-store"})
 
-    def send_json(self, obj, status=200):
+    def send_json(self, obj, status=200, extra=None):
         self.send_bytes(json.dumps(obj).encode(), "application/json", status,
-                        {"Cache-Control": "no-store"})
+                        {"Cache-Control": "no-store", **(extra or {})})
 
     def send_file(self, path, ctype, disposition=None, extra=None):
         try:
@@ -1634,6 +2068,19 @@ class FileHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
+    # ----- blocage des appareils et suivi des connexions
+    def parse_request(self):
+        if not super().parse_request():
+            return False
+        ip = self.client_address[0]
+        if is_blocked(ip):
+            self.close_connection = True
+            self.send_html(message_page("Accès bloqué", "Cet appareil a été bloqué par l'administrateur."), 403)
+            return False
+        track_device(ip, self.headers.get("User-Agent", ""), self.has_cookie(),
+                     hit=not self.path.startswith("/dashboard/data"))
+        return True
+
     # ----- authentification
     def has_cookie(self):
         c = SimpleCookie()
@@ -1650,6 +2097,15 @@ class FileHandler(BaseHTTPRequestHandler):
             "Ouvre le lien complet affiché dans le terminal au démarrage de biblio "
             "(il se termine par ?token=…).")
         self.send_html(html, 401)
+
+    def dash_session_id(self):
+        c = SimpleCookie()
+        try:
+            c.load(self.headers.get("Cookie", ""))
+        except Exception:
+            return ""
+        m = c.get("fl_dash")
+        return m.value if m else ""
 
     # ----- routage
     def do_GET(self):
@@ -1700,6 +2156,10 @@ class FileHandler(BaseHTTPRequestHandler):
                 self.serve_sub(arg("f"))
             elif path == "/pdf":
                 self.route_pdf(arg("f"))
+            elif path == "/dashboard":
+                self.page_dashboard()
+            elif path == "/dashboard/data":
+                self.route_dash_data()
             elif path.startswith("/docs/"):
                 self.route_docs(path)
             elif path.startswith(("/legacy/", "/build/", "/web/")):
@@ -1713,13 +2173,15 @@ class FileHandler(BaseHTTPRequestHandler):
         req = urlsplit(self.path)
         q = parse_qs(req.query)
         try:
-            if req.path not in ("/save", "/delete", "/upload-auth", "/upload"):
+            if req.path not in ("/save", "/delete", "/upload-auth", "/upload") + DASH_POSTS:
                 self.send_error(404)
                 return
             if not self.has_cookie() or self.headers.get("X-Requested-With") != "biblio":
                 self.send_json({"ok": False, "error": "Non autorisé"}, 403)
                 return
-            if req.path == "/delete":
+            if req.path in DASH_POSTS:
+                self.route_dash_post(req.path, q)
+            elif req.path == "/delete":
                 self.route_delete(q)
             elif req.path == "/upload-auth":
                 self.route_upload_auth()
@@ -2317,6 +2779,61 @@ class FileHandler(BaseHTTPRequestHandler):
             return
         self.send_json({"ok": True})
 
+    # ----- tableau de bord (mot de passe -> session -> données, blocage)
+    def page_dashboard(self):
+        if not DASH_PASSWORD:
+            self.send_html(message_page(
+                "Tableau de bord désactivé",
+                "Définis BIBLIO_DASHBOARD_PASSWORD (ou BIBLIO_PASSWORD) dans le .env, puis relance biblio.",
+                f"<a class='pill' href='/'>{icon('home', 16)}Accueil</a>"), 403)
+            return
+        self.send_html(dashboard_page(use_dash_session(self.dash_session_id(), touch=False)))
+
+    def route_dash_data(self):
+        if not use_dash_session(self.dash_session_id(), touch=False):
+            self.send_json({"ok": False, "error": "Session expirée"}, 401)
+            return
+        rows = device_rows(self.client_address[0])
+        self.send_json({
+            "ok": True, "host": socket.gethostname(), "memory": read_memory(), "devices": rows,
+            "active": sum(1 for r in rows if r["active"]), "blocked": sum(1 for r in rows if r["blocked"]),
+            "window": DEVICE_ACTIVE_SECONDS,
+        })
+
+    def route_dash_post(self, path, q):
+        """POST /dashboard/login (corps : mot de passe), /logout, /block?ip=…, /unblock?ip=…"""
+        cookie = "fl_dash={}; Path=/dashboard; HttpOnly; SameSite=Strict; Max-Age={}"
+        if path == "/dashboard/login":
+            if not DASH_PASSWORD:
+                self.send_json({"ok": False, "error": "Tableau de bord désactivé : mot de passe absent du .env"}, 403)
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                length = -1
+            if length < 0 or length > 1024:
+                self.send_json({"ok": False, "error": "Requête invalide"}, 400)
+                return
+            given = self.rfile.read(length).decode("utf-8", "replace")
+            ok, msg = check_password(self.client_address[0], given, DASH_PASSWORD)
+            if not ok:
+                self.send_json({"ok": False, "error": msg}, 429 if msg.startswith("Trop") else 403)
+                return
+            self.send_json({"ok": True}, extra={"Set-Cookie": cookie.format(issue_dash_session(), DASH_TTL)})
+            return
+        if path == "/dashboard/logout":
+            drop_dash_session(self.dash_session_id())
+            self.send_json({"ok": True}, extra={"Set-Cookie": cookie.format("", 0)})
+            return
+        if not use_dash_session(self.dash_session_id()):
+            self.send_json({"ok": False, "error": "Session expirée, reconnecte-toi."}, 401)
+            return
+        ok, err, warning = set_blocked(q.get("ip", [""])[0], path == "/dashboard/block", self.client_address[0])
+        if not ok:
+            self.send_json({"ok": False, "error": err}, 400)
+            return
+        self.send_json({"ok": True, "warning": warning})
+
     # ----- envoi de fichiers (mot de passe -> jeton d'envoi -> un POST par fichier)
     def drain(self, length):
         """Lit et jette le corps restant : sans cela le navigateur perd la réponse d'erreur."""
@@ -2472,7 +2989,7 @@ def find_pdfjs(cli):
 
 
 def main():
-    global ROOT, PORT, READONLY, TOKEN, ROOT_ID, PDFJS_DIR, PASSWORD, ENV_PATH, MAX_UPLOAD
+    global ROOT, PORT, READONLY, TOKEN, ROOT_ID, PDFJS_DIR, PASSWORD, DASH_PASSWORD, ENV_PATH, MAX_UPLOAD
 
     parser = argparse.ArgumentParser(description="Bibliothèque : documents, vidéos, texte et code")
     parser.add_argument("dossier", nargs="?", default=str(ROOT),
@@ -2491,12 +3008,15 @@ def main():
     ENV_PATH = Path(args.env or os.environ.get("BIBLIO_ENV") or HERE / ".env").expanduser().resolve()
     ENV.update(read_env(ENV_PATH))
     PASSWORD = conf("BIBLIO_PASSWORD")
+    DASH_PASSWORD = conf("BIBLIO_DASHBOARD_PASSWORD") or PASSWORD
     TOKEN = load_token()
     try:
         MAX_UPLOAD = max(0, int(conf("BIBLIO_MAX_UPLOAD_MB") or 4096)) * 1024 * 1024
     except ValueError:
         print("Attention : BIBLIO_MAX_UPLOAD_MB invalide, valeur par défaut (4096 Mo) utilisée.")
     ROOT_ID = hashlib.sha1(str(ROOT).encode()).hexdigest()[:8]
+    LOCAL_IPS.update(lan_ips())
+    load_blocklist()
     PDFJS_DIR = find_pdfjs(args.pdfjs)
 
     print(f"Bibliothèque : {ROOT}" + ("  (lecture seule)" if READONLY else ""))
@@ -2508,6 +3028,10 @@ def main():
         print("Taille maximale par fichier envoyé : " + (fmt_size(MAX_UPLOAD) if MAX_UPLOAD else "illimitée") + ".")
     else:
         print("Suppression et envoi de fichiers : désactivés (définis BIBLIO_PASSWORD dans le .env).")
+    if DASH_PASSWORD:
+        print(f"Tableau de bord : activé (/dashboard), {len(_blocked)} appareil(s) bloqué(s).")
+    else:
+        print("Tableau de bord : désactivé (définis BIBLIO_DASHBOARD_PASSWORD ou BIBLIO_PASSWORD dans le .env).")
     try:
         if ENV_PATH.stat().st_mode & 0o077:
             print(f"Attention : {ENV_PATH.name} est lisible par d'autres utilisateurs (chmod 600 recommandé).")
