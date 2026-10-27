@@ -48,7 +48,10 @@ LANGS = {"fr": "Français", "en": "English", "ar": "Arabe",
          "es": "Español", "de": "Deutsch", "it": "Italiano"}
 _sem = threading.Semaphore(2)
 _durations = {}
+_ainfo = {}
 _failed = set()
+COVER_NAMES = {"cover", "folder", "front", "album", "albumart", "artwork"}
+COVER_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 
 MAX_TEXT = 2 * 1024 * 1024      # lecture / édition
 MAX_SAVE = 5 * 1024 * 1024      # enregistrement
@@ -79,6 +82,8 @@ EXTRA_MIME = {
     ".json": "application/json", ".webp": "image/webp", ".avif": "image/avif",
     ".mkv": "video/x-matroska", ".m4a": "audio/mp4", ".woff2": "font/woff2",
     ".mjs": "text/javascript", ".wasm": "application/wasm", ".ftl": "text/plain", ".map": "application/json",
+    ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".opus": "audio/ogg",
+    ".flac": "audio/flac", ".aac": "audio/aac",
 }
 
 
@@ -152,6 +157,24 @@ ICONS.update({
     "queue": '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
 })
 
+ICONS.update({
+    "check": '<path d="M20 6 9 17l-5-5"/>',
+    "arrow_left": '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    "arrow_right": '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    "arrow_up": '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+    "arrow_down": '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+    # retour / avance de 10 s : flèche circulaire + « 10 » (texte SVG, pas un emoji)
+    "back10": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'
+              '<text x="12" y="15.4" text-anchor="middle" font-size="7.5" font-weight="700" '
+              'font-family="system-ui,sans-serif" stroke="none" fill="currentColor">10</text>',
+    "fwd10": '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>'
+             '<text x="12" y="15.4" text-anchor="middle" font-size="7.5" font-weight="700" '
+             'font-family="system-ui,sans-serif" stroke="none" fill="currentColor">10</text>',
+    "loader": '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+    # indicateur « en cours de lecture » (3 barres animées en CSS)
+    "eq": '<path class="b1" d="M6 20V11"/><path class="b2" d="M12 20V4"/><path class="b3" d="M18 20V14"/>',
+})
+
 
 def icon(name, size=20, cls="i"):
     return (
@@ -160,6 +183,14 @@ def icon(name, size=20, cls="i"):
         "stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>"
         f"{ICONS[name]}</svg>"
     )
+
+
+FAVICON = (
+    "<link rel='icon' href=\"data:image/svg+xml," + quote(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='#4f5bd5'/>"
+        "<g transform='translate(4 4)' fill='none' stroke='#fff' stroke-width='2' stroke-linecap='round' "
+        "stroke-linejoin='round'>" + ICONS["library"] + "</g></svg>") + "\">"
+)
 
 
 # --------------------------------------------------------------------------
@@ -478,7 +509,12 @@ BROWSE_JS = """
         upEl('up-bar').style.width = p + '%';
         upEl('up-sum').textContent = (ok + skipped + failed) + ' / ' + items.length + ' · ' + fmtB(Math.min(bytes, total)) + ' sur ' + fmtB(total);
       };
-      var mark = function(it, cls, txt){ it.row.className = 'uprow ' + cls; it.s.textContent = txt; };
+      var mark = function(it, cls, txt, ico){
+        it.row.className = 'uprow ' + cls;
+        it.s.textContent = '';
+        if (ico && ICO[ico]) { var w = document.createElement('span'); w.className = 'sico'; w.innerHTML = ICO[ico]; it.s.appendChild(w); }
+        it.s.appendChild(document.createTextNode(txt));
+      };
       var finish = function(msg){
         upRunning = false;
         window.removeEventListener('beforeunload', upWarn);
@@ -512,7 +548,7 @@ BROWSE_JS = """
           var j = {};
           try { j = JSON.parse(x.responseText); } catch(err) {}
           sent += it.f.size;
-          if (x.status === 200 && j.ok) { ok++; mark(it, 'ok', '✓ ' + fmtB(it.f.size)); upExpire = Date.now() + upTtl - 30000; }
+          if (x.status === 200 && j.ok) { ok++; mark(it, 'ok', fmtB(it.f.size), 'check'); upExpire = Date.now() + upTtl - 30000; }
           else if (x.status === 409) { skipped++; mark(it, 'skip', j.error || 'déjà présent'); }
           else if (j.code === 'ticket') {
             failed++; upTicket = null; mark(it, 'bad', 'session expirée');
@@ -918,7 +954,8 @@ body:not(.show-hidden) .dot{display:none}
 .uplist{max-height:34vh; overflow:auto; display:flex; flex-direction:column; gap:4px; font-size:13px}
 .uprow{display:flex; justify-content:space-between; gap:12px; padding:2px 4px}
 .uprow .n{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0}
-.uprow .s{flex:none; color:var(--muted)}
+.uprow .s{flex:none; color:var(--muted); display:inline-flex; align-items:center; gap:4px}
+.uprow .sico{display:inline-grid} .uprow .sico svg{width:14px; height:14px}
 .uprow.run .s{color:var(--accent)}
 .uprow.ok .s{color:var(--green)}
 .uprow.skip .s{color:var(--orange)}
@@ -1852,7 +1889,7 @@ def doc_open(title, body_class="", extra_css=""):
         "<!doctype html><html lang='fr'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'>"
         "<meta name='color-scheme' content='light dark'>"
-        f"<title>{escape(title)}</title>{THEME_INIT}<style>{CSS}{extra_css}</style></head>"
+        f"<title>{escape(title)}</title>{FAVICON}{THEME_INIT}<style>{CSS}{extra_css}</style></head>"
         f"<body class='{body_class}'>"
     )
 
@@ -1942,6 +1979,102 @@ def thumb_for(path):
                 return out
         _failed.add(key)
     return None
+
+
+def _tag(tags, *names):
+    low = {str(k).lower(): v for k, v in (tags or {}).items()}
+    for n in names:
+        v = low.get(n)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    return ""
+
+
+def audio_info(path):
+    """Durée, titre, artiste, album d'un fichier audio (ffprobe), mis en cache.
+    Sans ffprobe ou si le fichier est illisible : valeurs vides, le lecteur se rabat sur le nom du fichier."""
+    empty = {"duration": None, "title": "", "artist": "", "album": "", "embedded": False}
+    if not FFPROBE:
+        return empty
+    try:
+        st = path.stat()
+    except OSError:
+        return empty
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    if key in _ainfo:
+        return _ainfo[key]
+    info = dict(empty)
+    try:
+        out = subprocess.run(
+            [FFPROBE, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)],
+            capture_output=True, text=True, timeout=20)
+        j = json.loads(out.stdout or "{}")
+    except (ValueError, subprocess.SubprocessError, OSError):
+        j = {}
+    fmt = j.get("format") or {}
+    try:
+        d = float(fmt.get("duration"))
+        info["duration"] = d if d > 0 else None
+    except (TypeError, ValueError):
+        pass
+    tags = dict(fmt.get("tags") or {})
+    for stream in j.get("streams") or []:
+        if stream.get("codec_type") == "audio":
+            for k, v in (stream.get("tags") or {}).items():     # ogg / opus : tags portés par le flux
+                tags.setdefault(k, v)
+        elif stream.get("codec_type") == "video" and (stream.get("disposition") or {}).get("attached_pic"):
+            info["embedded"] = True
+    info["title"] = _tag(tags, "title")
+    info["artist"] = _tag(tags, "artist", "album_artist", "albumartist")
+    info["album"] = _tag(tags, "album")
+    if len(_ainfo) > 5000:
+        _ainfo.clear()
+    _ainfo[key] = info
+    return info
+
+
+def folder_cover(directory):
+    """cover.jpg, folder.png, front.webp… présent dans le dossier de la piste."""
+    try:
+        for f in sorted(directory.iterdir(), key=lambda x: x.name.lower()):
+            if f.suffix.lower() in COVER_EXT and f.stem.lower() in COVER_NAMES and f.is_file():
+                return f
+    except OSError:
+        pass
+    return None
+
+
+def has_cover(path, info):
+    return bool((info["embedded"] and FFMPEG) or folder_cover(path.parent))
+
+
+def cover_for(path):
+    """Pochette d'une piste : image intégrée aux tags (ffmpeg, JPEG en cache), sinon image du dossier."""
+    info = audio_info(path)
+    if info["embedded"] and FFMPEG:
+        st = path.stat()
+        key = hashlib.sha1(f"cover|{path}|{st.st_mtime_ns}|{st.st_size}".encode()).hexdigest()
+        out = CACHE / f"{key}.jpg"
+        if out.exists():
+            return out
+        if key not in _failed:
+            with _sem:
+                if out.exists():
+                    return out
+                CACHE.mkdir(parents=True, exist_ok=True)
+                tmp = CACHE / f"{key}.tmp.jpg"
+                try:
+                    subprocess.run(
+                        [FFMPEG, "-v", "error", "-y", "-i", str(path), "-an", "-map", "0:v:0", "-frames:v", "1",
+                         "-vf", "scale='min(640,iw)':-2", "-q:v", "4", str(tmp)],
+                        capture_output=True, timeout=40)
+                except (subprocess.SubprocessError, OSError):
+                    pass
+                if tmp.exists() and tmp.stat().st_size > 0:
+                    tmp.replace(out)
+                    return out
+                _failed.add(key)
+    return folder_cover(path.parent)
 
 
 def find_subtitles(video):
@@ -2579,43 +2712,97 @@ def dashboard_page(unlocked):
 
 LISTEN_CSS = """
 .listen{max-width:1100px; margin:0 auto; padding:16px 16px 56px; display:grid; gap:20px 28px; grid-template-columns:minmax(0,1fr); align-items:start}
-@media(min-width:900px){.listen{grid-template-columns:minmax(0,420px) minmax(0,1fr)}}
+@media(min-width:900px){
+  .listen{grid-template-columns:minmax(0,420px) minmax(0,1fr)}
+  .lplayer{position:sticky; top:calc(var(--tb) + 16px)}
+}
 .lplayer{padding:20px; border-radius:20px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow)}
-.cover{display:grid; place-items:center; width:min(60vw,240px); aspect-ratio:1; margin:0 auto 18px; border-radius:24px; color:var(--pink); background:linear-gradient(145deg,var(--pink-soft,var(--accent-soft)),var(--accent-soft)); box-shadow:var(--shadow)}
-.cover.playing svg{animation:lpulse 2.4s ease-in-out infinite}
+
+/* pochette : image des tags / du dossier, sinon icône */
+.cover{position:relative; overflow:hidden; display:grid; place-items:center; width:min(60vw,240px); aspect-ratio:1; margin:0 auto 18px; border-radius:24px; color:var(--pink); background:linear-gradient(145deg,var(--pink-soft,var(--accent-soft)),var(--accent-soft)); box-shadow:var(--shadow)}
+.cover img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
+.cover.has-img .cover-ico{visibility:hidden}
+.cover.playing:not(.has-img) .cover-ico svg{animation:lpulse 2.4s ease-in-out infinite}
 @keyframes lpulse{50%{transform:scale(1.08)}}
-@media(prefers-reduced-motion:reduce){.cover.playing svg{animation:none}}
+
 .ltitle{text-align:center}
-.ltitle h1{margin:0 0 8px; font-size:20px; line-height:1.3; overflow-wrap:anywhere}
+.ltitle h1{margin:0 0 4px; font-size:20px; line-height:1.3; overflow-wrap:anywhere}
+.lartist{margin:0 0 10px; font-size:14px; color:var(--muted); overflow-wrap:anywhere}
+.lmeta{display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:8px; margin-top:8px}
+.lmeta .sub{margin:0}
+
+/* curseurs (position et volume) : remplissage de progression, plage déjà en mémoire tampon */
 .seek{display:flex; align-items:center; gap:10px; margin-top:18px}
 .seek input{flex:1; min-width:0}
 .time{font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums; min-width:42px; text-align:center}
-.lplayer input[type=range]{accent-color:var(--accent); height:28px; cursor:pointer}
+.rng{-webkit-appearance:none; appearance:none; height:28px; margin:0; padding:0; background:transparent; cursor:pointer; --p:0%; --b:0%}
+.rng:focus{outline:none}
+.rng::-webkit-slider-runnable-track{height:6px; border-radius:99px; background:linear-gradient(to right,var(--accent) 0 var(--p),var(--sel) var(--p) var(--b),var(--bg-2) var(--b) 100%)}
+.rng::-moz-range-track{height:6px; border-radius:99px; background:linear-gradient(to right,var(--accent) 0 var(--p),var(--sel) var(--p) var(--b),var(--bg-2) var(--b) 100%)}
+.rng::-webkit-slider-thumb{-webkit-appearance:none; width:16px; height:16px; margin-top:-5px; border:0; border-radius:50%; background:var(--accent); box-shadow:0 0 0 3px var(--surface),var(--shadow); transition:transform .12s}
+.rng::-moz-range-thumb{width:16px; height:16px; border:0; border-radius:50%; background:var(--accent); box-shadow:0 0 0 3px var(--surface),var(--shadow)}
+.rng:hover::-webkit-slider-thumb,.rng:active::-webkit-slider-thumb{transform:scale(1.2)}
+.rng:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px var(--surface),0 0 0 5px var(--accent)}
+.rng:focus-visible::-moz-range-thumb{box-shadow:0 0 0 3px var(--surface),0 0 0 5px var(--accent)}
+
+/* commandes */
 .ctrls{display:flex; align-items:center; justify-content:center; gap:10px; margin-top:12px}
-.extra{display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:10px; margin-top:14px}
-.extra input[type=range]{width:110px}
-.abtn{display:grid; place-items:center; width:44px; height:44px; border-radius:50%; border:1px solid transparent; background:transparent; color:var(--text); cursor:pointer; transition:background .15s,color .15s}
+.modes{display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:10px; margin-top:12px}
+.vol{display:flex; align-items:center; justify-content:center; gap:8px; margin:8px auto 0; max-width:280px}
+.vol input{flex:1; min-width:0}
+.abtn{display:grid; place-items:center; width:44px; height:44px; border-radius:50%; border:1px solid transparent; background:transparent; color:var(--text); cursor:pointer; transition:background .15s,color .15s,transform .12s}
 .abtn:hover{background:var(--bg-2)}
+.abtn:active{transform:scale(.92)}
+.abtn:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 .abtn.on{background:var(--accent-soft); color:var(--accent)}
-.abtn.big{width:64px; height:64px; background:var(--accent); color:#fff; box-shadow:var(--shadow)}
+.abtn svg{width:22px; height:22px}
+.abtn.big{width:64px; height:64px; background:var(--accent); color:var(--on-accent); box-shadow:var(--shadow)}
 .abtn.big:hover{background:var(--accent); filter:brightness(1.08)}
+.abtn.big svg{width:30px; height:30px}
 .abtn.sm{width:36px; height:36px}
+.abtn.sm svg{width:18px; height:18px}
+#b-play svg,#b-prev svg,#b-next svg{fill:currentColor}
+#b-play.loading svg{fill:none; animation:lspin .9s linear infinite}
+@keyframes lspin{to{transform:rotate(360deg)}}
 .pill.sm{padding:6px 12px; font-size:13px}
+.pill.sm svg{width:16px; height:16px}
 .lmsg{min-height:18px; margin-top:10px; text-align:center}
-.keys{margin-top:12px; font-size:13px; color:var(--muted)}
-.keys summary{cursor:pointer}
+
+@media(prefers-reduced-motion:reduce){
+  .cover.playing:not(.has-img) .cover-ico svg,#b-play.loading svg{animation:none}
+  #b-play.loading svg{opacity:.7}
+}
+
+/* aide clavier (anciennement « .keys », classe déjà utilisée par la barre de touches de l'éditeur) */
+.lkeys{margin-top:12px; font-size:13px; color:var(--muted)}
+.lkeys summary{cursor:pointer; padding:4px 0}
+.lkeys .hint{margin-top:8px; line-height:1.9}
+.hint kbd svg{display:inline-block; vertical-align:-2px}
+
+/* file de lecture */
 .lqueue h2{display:flex; align-items:center; gap:8px; margin:0 0 10px; font-size:16px}
-.lfilter{width:100%; box-sizing:border-box; padding:9px 14px; margin-bottom:10px; font:inherit; font-size:14px; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:99px; outline:none}
+.lfilter{width:100%; padding:9px 14px; margin-bottom:10px; font:inherit; font-size:14px; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:99px; outline:none}
 .lfilter:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
-.llist{display:flex; flex-direction:column; gap:6px; max-height:70vh; overflow:auto}
+.llist{position:relative; display:flex; flex-direction:column; gap:6px; max-height:70vh; overflow:auto}
 .ltrack{display:flex; align-items:center; gap:12px; width:100%; padding:10px 12px; text-align:left; font:inherit; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:12px; cursor:pointer}
 .ltrack:hover{background:var(--bg-2)}
+.ltrack:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 .ltrack.cur{border-color:var(--accent); background:var(--accent-soft)}
 .ltrack.bad{opacity:.5}
-.ltrack .num{min-width:26px; text-align:right; font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums}
-.ltrack .tn{flex:1; min-width:0; overflow-wrap:anywhere}
-.ltrack .te{font-size:11.5px; color:var(--muted)}
+.ltrack .num{display:grid; place-items:center; flex:none; min-width:26px; height:20px; font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums}
 .ltrack.cur .num{color:var(--accent)}
+.ltrack .eqi{display:none}
+.ltrack.playing .n{display:none}
+.ltrack.playing .eqi{display:grid}
+.eqi svg{width:16px; height:16px}
+.eqi .b1,.eqi .b2,.eqi .b3{transform-box:fill-box; transform-origin:50% 100%; animation:leq 1s ease-in-out infinite}
+.eqi .b2{animation-delay:-.4s}
+.eqi .b3{animation-delay:-.75s}
+@keyframes leq{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
+@media(prefers-reduced-motion:reduce){.eqi .b1,.eqi .b2,.eqi .b3{animation:none}}
+.ltrack .tn{flex:1; min-width:0; overflow-wrap:anywhere}
+.ltrack .td{flex:none; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums}
+.ltrack .te{flex:none; font-size:11.5px; color:var(--muted); min-width:34px; text-align:right}
 """
 
 LISTEN_JS = """
@@ -2623,9 +2810,10 @@ LISTEN_JS = """
   var cfg = window.LCFG, I = window.LICO || {};
   var T = cfg.tracks, n = T.length;
   var $ = function(id){ return document.getElementById(id); };
-  var a = $('l-audio');
-  var idx = cfg.start, order = [], pos = 0, first = true, errRun = 0;
+  var a = $('l-audio'), seek = $('l-seek'), vslider = $('l-vol'), cov = $('l-cover'), img = $('l-img');
+  var idx = cfg.start, order = [], pos = 0, first = true, errRun = 0, errT = 0, msgT = 0;
   var shuffle = false, repeat = 'off', rates = [0.75, 1, 1.25, 1.5, 1.75, 2], rate = 1;
+  var loading = false, seeking = false, lastSave = 0, rows = [], infos = {}, curRow = null;
   function load(k, d){ try { var v = localStorage.getItem('al:' + k); return v === null ? d : v; } catch(e) { return d; } }
   function store(k, v){ try { localStorage.setItem('al:' + k, v); } catch(e) {} }
 
@@ -2641,7 +2829,21 @@ LISTEN_JS = """
     var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), r = s % 60;
     return (h ? h + ':' + ('0' + m).slice(-2) : m) + ':' + ('0' + r).slice(-2);
   }
-  function say(t){ $('l-msg').textContent = t || ''; }
+  // keep = true : le message reste (erreurs) ; sinon il s'efface seul
+  function say(t, keep){
+    clearTimeout(msgT);
+    $('l-msg').textContent = t || '';
+    if (t && !keep) msgT = setTimeout(function(){ $('l-msg').textContent = ''; }, 4000);
+  }
+  function setIcon(btn, name){ btn.innerHTML = I[name] || ''; }
+  function play(){
+    var pr = a.play();
+    if (pr && pr.catch) pr.catch(function(e){
+      if (e && e.name === 'AbortError') return;       // lecture interrompue par un changement de piste
+      loading = false; renderPlay();
+      if (e && e.name === 'NotAllowedError') say('Appuie sur lecture pour démarrer.', true);
+    });
+  }
 
   /* ----- ordre de lecture ----- */
   function rebuild(){
@@ -2659,73 +2861,160 @@ LISTEN_JS = """
     }
   }
 
+  /* ----- informations des pistes (durée, tags) : chargées à la demande ----- */
+  function getInfo(i){
+    if (!infos[i]) {
+      infos[i] = fetch('/meta?f=' + T[i].q)
+        .then(function(r){ return r.ok ? r.json() : {}; })
+        .catch(function(){ return {}; });
+    }
+    return infos[i];
+  }
+  function showDur(i, d){
+    var el = rows[i] && rows[i].querySelector('.td');
+    if (el && d) el.textContent = fmt(d);
+  }
+
   /* ----- liste des pistes ----- */
-  var rows = [];
   function buildList(){
     var box = $('l-list');
     box.textContent = '';
+    var io = 'IntersectionObserver' in window ? new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if (!e.isIntersecting) return;
+        io.unobserve(e.target);
+        var i = +e.target.dataset.i;
+        getInfo(i).then(function(j){ showDur(i, j && j.duration); });
+      });
+    }, {root: box, rootMargin: '120px'}) : null;
     T.forEach(function(t, i){
       var b = document.createElement('button');
-      b.type = 'button'; b.className = 'ltrack';
-      var num = document.createElement('span'); num.className = 'num'; num.textContent = i + 1;
+      b.type = 'button'; b.className = 'ltrack'; b.dataset.i = i;
+      var num = document.createElement('span'); num.className = 'num';
+      var nn = document.createElement('span'); nn.className = 'n'; nn.textContent = i + 1;
+      var eq = document.createElement('span'); eq.className = 'eqi'; eq.innerHTML = I.eq || '';
+      num.appendChild(nn); num.appendChild(eq);
       var tn = document.createElement('span'); tn.className = 'tn'; tn.textContent = t.n;
+      var td = document.createElement('span'); td.className = 'td';
       var te = document.createElement('span'); te.className = 'te'; te.textContent = t.e;
-      b.appendChild(num); b.appendChild(tn); b.appendChild(te);
+      b.appendChild(num); b.appendChild(tn); b.appendChild(td); b.appendChild(te);
       b.addEventListener('click', function(){ playIndex(i); });
       box.appendChild(b); rows.push(b);
+      if (io) io.observe(b);
     });
   }
-  function mark(){
-    rows.forEach(function(r, i){
-      r.classList.toggle('cur', i === idx);
-      r.querySelector('.num').textContent = (i === idx && !a.paused) ? '\\u25B6' : (i + 1);
+  function markCurrent(){
+    if (curRow) { curRow.classList.remove('cur', 'playing'); curRow.removeAttribute('aria-current'); }
+    curRow = rows[idx] || null;
+    if (curRow) { curRow.classList.add('cur'); curRow.setAttribute('aria-current', 'true'); }
+    renderPlayRow();
+  }
+  function renderPlayRow(){ if (curRow) curRow.classList.toggle('playing', !a.paused && !a.ended); }
+  // fait défiler la liste elle-même (jamais la page) pour montrer la piste courante
+  function reveal(){
+    var box = $('l-list'), r = rows[idx];
+    if (!box || !r) return;
+    window.requestAnimationFrame(function(){
+      box.scrollTop = Math.max(0, r.offsetTop - (box.clientHeight - r.offsetHeight) / 2);
     });
-    var cur = rows[idx];
-    if (cur && cur.scrollIntoView) cur.scrollIntoView({block: 'nearest'});
   }
 
-  /* ----- lecture ----- */
-  function setIcon(btn, name){ btn.innerHTML = I[name] || ''; }
-  function ui(){
-    var playing = !a.paused;
-    setIcon($('b-play'), playing ? 'pause' : 'play');
-    $('b-play').setAttribute('aria-label', playing ? 'Pause' : 'Lecture');
-    document.querySelector('.cover').classList.toggle('playing', playing);
+  /* ----- affichage ----- */
+  function renderPlay(){
+    var playing = !a.paused, b = $('b-play');
+    setIcon(b, loading ? 'loader' : (playing ? 'pause' : 'play'));
+    b.classList.toggle('loading', loading);
+    b.setAttribute('aria-busy', loading ? 'true' : 'false');
+    b.setAttribute('aria-label', playing ? 'Pause' : 'Lecture');
+    cov.classList.toggle('playing', playing && !loading);
+    renderPlayRow();
+  }
+  function renderModes(){
     $('b-shuffle').classList.toggle('on', shuffle);
     $('b-shuffle').setAttribute('aria-pressed', shuffle ? 'true' : 'false');
     var rb = $('b-repeat');
     setIcon(rb, repeat === 'one' ? 'repeat1' : 'repeat');
     rb.classList.toggle('on', repeat !== 'off');
+    rb.setAttribute('aria-pressed', repeat !== 'off' ? 'true' : 'false');
     rb.setAttribute('aria-label', 'Répétition : ' + (repeat === 'off' ? 'désactivée' : (repeat === 'all' ? 'toutes les pistes' : 'cette piste')));
     rb.title = 'Répétition (R) : ' + (repeat === 'off' ? 'aucune' : (repeat === 'all' ? 'tout' : 'une piste'));
+  }
+  function renderVol(){
     var muted = a.muted || a.volume === 0;
     setIcon($('b-mute'), muted ? 'mute' : 'volume');
-    $('l-vol').value = Math.round((a.muted ? 0 : a.volume) * 100);
-    $('b-rate').textContent = String(rate).replace('.', ',') + '×';
-    mark();
+    $('b-mute').setAttribute('aria-pressed', muted ? 'true' : 'false');
+    var v = Math.round((a.muted ? 0 : a.volume) * 100);
+    vslider.value = v;
+    vslider.style.setProperty('--p', v + '%');
+    vslider.setAttribute('aria-valuetext', v + ' %');
   }
-  function meta(){
-    var t = T[idx];
-    $('l-title').textContent = t.n;
-    $('l-count').textContent = 'Piste ' + (idx + 1) + ' sur ' + n;
+  function renderRate(){ $('b-rate').textContent = String(rate).replace('.', ',') + '×'; }
+  function renderSeek(){
+    var d = a.duration, ok = isFinite(d) && d > 0;
+    var p = ok ? a.currentTime / d * 100 : 0;
+    if (!seeking) seek.value = Math.round(p * 10);
+    var shown = seeking ? seek.value / 10 : p, buf = 0;
+    if (ok) {
+      for (var i = 0; i < a.buffered.length; i++) {
+        if (a.buffered.start(i) <= a.currentTime + 0.25 && a.buffered.end(i) >= a.currentTime) buf = Math.max(buf, a.buffered.end(i));
+      }
+      buf = buf / d * 100;
+    }
+    seek.style.setProperty('--p', shown + '%');
+    seek.style.setProperty('--b', Math.max(shown, buf) + '%');
+    $('l-cur').textContent = fmt(seeking && ok ? seek.value / 1000 * d : a.currentTime);
+    $('l-dur').textContent = fmt(ok ? d : 0);
+    seek.setAttribute('aria-valuetext', fmt(a.currentTime) + ' sur ' + fmt(ok ? d : 0));
+  }
+  function ui(){ renderPlay(); renderModes(); renderVol(); renderRate(); renderSeek(); }
+
+  /* ----- titre, pochette, écran de verrouillage ----- */
+  function coverUrl(k){ return '/cover?f=' + T[k].q; }
+  function session(title, info){
+    if (!('mediaSession' in navigator) || !window.MediaMetadata) return;
+    var art = [];
+    if (info && info.cover) { try { art = [{src: new URL(coverUrl(idx), location.href).href, sizes: '640x640'}]; } catch(e) {} }
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: title, artist: (info && info.artist) || cfg.folder, album: (info && info.album) || cfg.folder, artwork: art
+      });
+    } catch(e) {}
+  }
+  function applyTitle(info){
+    var title = (info && info.title) || T[idx].n;
+    $('l-title').textContent = title;
+    var sub = [info && info.artist, info && info.album].filter(Boolean).join(' · ');
+    var el = $('l-artist'); el.textContent = sub; el.hidden = !sub;
+    document.title = title + ' — Lecteur audio';
+    session(title, info);
+  }
+  function setCover(info, k){
+    cov.classList.remove('has-img'); img.hidden = true; img.removeAttribute('src');
+    if (info && info.cover) img.src = coverUrl(k);
+  }
+  img.addEventListener('load', function(){ cov.classList.add('has-img'); img.hidden = false; });
+  img.addEventListener('error', function(){ cov.classList.remove('has-img'); img.hidden = true; });
+
+  /* ----- lecture ----- */
+  function start(k, wantPlay){
+    clearTimeout(errT);
+    idx = k;
+    var t = T[k];
+    $('l-count').textContent = 'Piste ' + (k + 1) + ' sur ' + n;
     $('l-dl').href = '/raw?dl=1&f=' + t.q;
-    document.title = t.n + ' — Lecteur audio';
     try { history.replaceState(null, '', '/listen?f=' + t.q); } catch(e) {}
-    if ('mediaSession' in navigator && window.MediaMetadata) {
-      try { navigator.mediaSession.metadata = new MediaMetadata({title: t.n, artist: cfg.folder, album: cfg.folder}); } catch(e) {}
-    }
-  }
-  function start(k, play){
-    idx = k; meta();
-    a.src = '/raw?f=' + T[k].q;
+    applyTitle(null); setCover(null, k);
+    getInfo(k).then(function(j){
+      if (k !== idx) return;
+      applyTitle(j); setCover(j, k); showDur(k, j && j.duration);
+    });
+    a.src = '/raw?f=' + t.q;
     a.defaultPlaybackRate = rate; a.playbackRate = rate;
-    $('l-seek').value = 0; $('l-cur').textContent = '0:00'; $('l-dur').textContent = '0:00';
     say('');
-    if (play) {
-      var pr = a.play();
-      if (pr && pr.catch) pr.catch(function(){ say('Appuie sur lecture pour démarrer.'); ui(); });
-    }
-    ui();
+    markCurrent(); reveal();
+    loading = !!wantPlay;
+    if (wantPlay) play();
+    renderSeek(); renderPlay();
   }
   function playIndex(k){
     idx = k; rebuild();
@@ -2741,7 +3030,8 @@ LISTEN_JS = """
   function next(auto){
     if (pos + 1 < n) { pos++; start(order[pos], true); return; }
     if (repeat === 'all' || (!auto && n > 1)) { wrap(); return; }
-    a.pause(); a.currentTime = 0; ui(); say('Fin de la liste.');
+    if (!auto) { a.currentTime = 0; play(); return; }       // une seule piste : « suivant » la relance
+    a.pause(); a.currentTime = 0; renderPlay(); say('Fin de la liste.');
   }
   function prev(){
     if (a.currentTime > 3) { a.currentTime = 0; return; }
@@ -2749,30 +3039,28 @@ LISTEN_JS = """
     if (n > 1) { pos = n - 1; start(order[pos], true); return; }
     a.currentTime = 0;
   }
-  function toggle(){
-    if (a.paused) { var pr = a.play(); if (pr && pr.catch) pr.catch(function(){}); } else a.pause();
-  }
+  function toggle(){ if (a.paused) play(); else a.pause(); }
   function seekBy(d){
     if (!isFinite(a.duration)) return;
     a.currentTime = Math.max(0, Math.min(a.duration, a.currentTime + d));
   }
   function setShuffle(v){
-    shuffle = v; store('shuffle', v ? '1' : '0'); rebuild(); ui();
-    say(v ? 'Lecture aléatoire activée.' : 'Lecture dans l\\'ordre.');
+    shuffle = v; store('shuffle', v ? '1' : '0'); rebuild(); renderModes();
+    say(v ? 'Lecture aléatoire activée.' : "Lecture dans l'ordre.");
   }
   function cycleRepeat(){
     repeat = repeat === 'off' ? 'all' : (repeat === 'all' ? 'one' : 'off');
-    store('repeat', repeat); ui();
+    store('repeat', repeat); renderModes();
     say(repeat === 'off' ? 'Répétition désactivée.' : (repeat === 'all' ? 'Répétition de toutes les pistes.' : 'Répétition de la piste.'));
   }
   function setVol(v){
     v = Math.max(0, Math.min(1, v));
     a.volume = v; if (v > 0) a.muted = false;
-    store('vol', v); store('muted', '0'); ui();
+    store('vol', v); store('muted', '0');
   }
-  function toggleMute(){ a.muted = !a.muted; store('muted', a.muted ? '1' : '0'); ui(); }
+  function toggleMute(){ a.muted = !a.muted; store('muted', a.muted ? '1' : '0'); }
   function setRate(r){
-    rate = r; a.defaultPlaybackRate = r; a.playbackRate = r; store('rate', r); ui();
+    rate = r; a.defaultPlaybackRate = r; a.playbackRate = r; store('rate', r); renderRate();
     say('Vitesse : ' + String(r).replace('.', ',') + '×');
   }
   function stepRate(d){
@@ -2781,11 +3069,15 @@ LISTEN_JS = """
   }
 
   /* ----- événements du lecteur ----- */
-  var seeking = false, lastSave = 0;
   function posKey(){ return 'al:pos:' + cfg.key + ':' + T[idx].f; }
+  function posState(){
+    if ('mediaSession' in navigator && navigator.mediaSession.setPositionState && isFinite(a.duration)) {
+      try { navigator.mediaSession.setPositionState({duration: a.duration, playbackRate: a.playbackRate, position: Math.min(a.currentTime, a.duration)}); } catch(e) {}
+    }
+  }
   a.addEventListener('loadedmetadata', function(){
-    $('l-dur').textContent = fmt(a.duration);
     errRun = 0;
+    showDur(idx, a.duration);
     if (first) {
       first = false;
       try {
@@ -2793,75 +3085,82 @@ LISTEN_JS = """
         if (s && s.t > 3 && s.t < a.duration - 5) a.currentTime = s.t;
       } catch(e) {}
     }
-    posState();
+    renderSeek(); posState();
   });
+  a.addEventListener('durationchange', renderSeek);
+  a.addEventListener('progress', renderSeek);
   a.addEventListener('timeupdate', function(){
-    if (!seeking && isFinite(a.duration) && a.duration > 0) $('l-seek').value = Math.round(a.currentTime / a.duration * 1000);
-    $('l-cur').textContent = fmt(a.currentTime);
+    renderSeek();
     var now = Date.now();
     if (now - lastSave > 2500 && a.duration && !a.ended) {
       lastSave = now;
       try { localStorage.setItem(posKey(), JSON.stringify({t: a.currentTime})); } catch(e) {}
     }
   });
-  a.addEventListener('play', function(){ ui(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
+  a.addEventListener('waiting', function(){ if (!a.paused) { loading = true; renderPlay(); } });
+  a.addEventListener('canplay', function(){ loading = false; renderPlay(); });
+  a.addEventListener('playing', function(){ loading = false; renderPlay(); });
+  a.addEventListener('play', function(){ renderPlay(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
   a.addEventListener('pause', function(){
-    ui(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+    loading = false; renderPlay();
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
     try { if (a.duration && !a.ended) localStorage.setItem(posKey(), JSON.stringify({t: a.currentTime})); } catch(e) {}
   });
   a.addEventListener('ended', function(){
     try { localStorage.removeItem(posKey()); } catch(e) {}
-    if (repeat === 'one') { a.currentTime = 0; var pr = a.play(); if (pr && pr.catch) pr.catch(function(){}); return; }
+    if (repeat === 'one') { a.currentTime = 0; play(); return; }
     next(true);
   });
   a.addEventListener('error', function(){
-    rows[idx] && rows[idx].classList.add('bad');
+    loading = false;
+    var c = a.error ? a.error.code : 0;
+    var why = c === 2 ? 'Erreur réseau' : (c === 3 ? 'Fichier audio endommagé' : (c === 4 ? 'Format non pris en charge' : 'Lecture impossible'));
+    if (rows[idx]) rows[idx].classList.add('bad');
     errRun++;
-    say('Format non pris en charge par ce navigateur : ' + T[idx].n);
-    if (errRun < n && n > 1) setTimeout(function(){ next(true); }, 900);
+    var canSkip = n > 1 && errRun < n && (pos + 1 < n || repeat === 'all');
+    say(why + ' : ' + T[idx].n + (canSkip ? ' — passage à la piste suivante…' : ''), true);
+    renderPlay();
+    if (canSkip) { clearTimeout(errT); errT = setTimeout(function(){ next(true); }, 1400); }
   });
-  a.addEventListener('volumechange', ui);
-  function posState(){
-    if ('mediaSession' in navigator && navigator.mediaSession.setPositionState && isFinite(a.duration)) {
-      try { navigator.mediaSession.setPositionState({duration: a.duration, playbackRate: a.playbackRate, position: Math.min(a.currentTime, a.duration)}); } catch(e) {}
-    }
-  }
-  a.addEventListener('seeked', posState);
+  a.addEventListener('volumechange', renderVol);
+  a.addEventListener('ratechange', posState);
+  a.addEventListener('seeked', function(){ renderSeek(); posState(); });
 
   /* ----- commandes ----- */
-  var seek = $('l-seek');
-  seek.addEventListener('input', function(){
-    seeking = true;
-    if (isFinite(a.duration)) $('l-cur').textContent = fmt(seek.value / 1000 * a.duration);
-  });
+  seek.addEventListener('input', function(){ seeking = true; renderSeek(); });
   seek.addEventListener('change', function(){
     if (isFinite(a.duration)) a.currentTime = seek.value / 1000 * a.duration;
-    seeking = false; seek.blur();
+    seeking = false; renderSeek(); seek.blur();
   });
-  $('l-vol').addEventListener('input', function(e){ setVol(e.target.value / 100); });
-  $('l-vol').addEventListener('change', function(e){ e.target.blur(); });
+  seek.addEventListener('pointercancel', function(){ seeking = false; renderSeek(); });
+  vslider.addEventListener('input', function(e){ setVol(e.target.value / 100); });
+  vslider.addEventListener('change', function(e){ e.target.blur(); });
   $('b-play').addEventListener('click', toggle);
   $('b-next').addEventListener('click', function(){ next(false); });
   $('b-prev').addEventListener('click', prev);
+  $('b-back').addEventListener('click', function(){ seekBy(-10); });
+  $('b-fwd').addEventListener('click', function(){ seekBy(10); });
   $('b-shuffle').addEventListener('click', function(){ setShuffle(!shuffle); });
   $('b-repeat').addEventListener('click', cycleRepeat);
   $('b-mute').addEventListener('click', toggleMute);
   $('b-rate').addEventListener('click', function(){ setRate(rates[(rates.indexOf(rate) + 1) % rates.length]); });
-  $('l-filter').addEventListener('input', function(e){
-    var q = e.target.value.trim().toLowerCase();
-    rows.forEach(function(r, i){ r.hidden = q && T[i].n.toLowerCase().indexOf(q) < 0; });
-  });
+  function applyFilter(){
+    var q = $('l-filter').value.trim().toLowerCase();
+    rows.forEach(function(r, i){ r.hidden = !!q && T[i].n.toLowerCase().indexOf(q) < 0; });
+  }
+  $('l-filter').addEventListener('input', applyFilter);
 
   document.addEventListener('keydown', function(e){
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     var tag = (e.target.tagName || '').toLowerCase(), type = (e.target.type || '').toLowerCase();
+    var k = e.key, lk = k.toLowerCase();
     if (tag === 'textarea' || (tag === 'input' && type !== 'range' && type !== 'checkbox')) {
-      if (e.key === 'Escape') e.target.blur();
+      if (k === 'Escape') { if (e.target.id === 'l-filter') { e.target.value = ''; applyFilter(); } e.target.blur(); }
       return;
     }
-    var k = e.key, lk = k.toLowerCase();
     if (tag === 'button' && (k === ' ' || k === 'Enter')) return;
-    if (tag === 'input' && type === 'range' && (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown')) return;
+    // le curseur de volume garde ses flèches natives ; sur le curseur de position, elles avancent de 5 s
+    if (e.target.id === 'l-vol' && (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown')) return;
     var handled = true;
     if (k === ' ' || lk === 'k') toggle();
     else if (lk === 'n') next(false);
@@ -2885,7 +3184,7 @@ LISTEN_JS = """
 
   if ('mediaSession' in navigator) {
     var H = {
-      play: function(){ var pr = a.play(); if (pr && pr.catch) pr.catch(function(){}); }, pause: function(){ a.pause(); },
+      play: play, pause: function(){ a.pause(); },
       previoustrack: prev, nexttrack: function(){ next(false); },
       seekbackward: function(d){ seekBy(-((d && d.seekOffset) || 10)); },
       seekforward: function(d){ seekBy((d && d.seekOffset) || 10); },
@@ -3084,6 +3383,8 @@ class FileHandler(BaseHTTPRequestHandler):
                 self.serve_thumb(arg("f"))
             elif path == "/meta":
                 self.serve_meta(arg("f"))
+            elif path == "/cover":
+                self.serve_cover(arg("f"))
             elif path == "/sub":
                 self.serve_sub(arg("f"))
             elif path == "/pdf":
@@ -3377,7 +3678,8 @@ class FileHandler(BaseHTTPRequestHandler):
         sep = "<span class='key sepk'></span>"
         items = [
             k("Esc", "esc", "vimonly"), k("Tab", "tab"),
-            k("←", "left"), k("↓", "down"), k("↑", "up"), k("→", "right"),
+            k(icon("arrow_left", 18), "left"), k(icon("arrow_down", 18), "down"),
+            k(icon("arrow_up", 18), "up"), k(icon("arrow_right", 18), "right"),
             k(":", "ex", "vimonly"), k("/", "find"),
             k("undo", "undo"), k("redo", "redo"),
             sep,
@@ -3552,35 +3854,45 @@ class FileHandler(BaseHTTPRequestHandler):
                   for f in siblings]
         cfg = {"tracks": tracks, "start": start, "folder": folder_name,
                "back": folder_url(p.parent), "key": ROOT_ID}
+
+        def kbd_icon(name):
+            return f"<kbd>{icon(name, 12, 'ik')}</kbd>"
+
         html = (
             doc_open(f"{p.stem} — Lecteur audio", "", LISTEN_CSS) + topbar(False)
             + "<main class='listen'>"
             "<section class='lplayer'>"
-            f"<div class='cover'>{icon('music', 72)}</div>"
-            "<div class='ltitle'><h1 id='l-title'>…</h1>"
-            f"<a class='chip' href='{folder_url(p.parent)}'>{icon('folder', 16)}{escape(folder_name)}</a> "
-            "<span class='sub' id='l-count'></span></div>"
+            f"<div class='cover' id='l-cover'><span class='cover-ico'>{icon('music', 72)}</span>"
+            "<img id='l-img' alt='Pochette' hidden></div>"
+            "<div class='ltitle'><h1 id='l-title'>…</h1><p class='lartist' id='l-artist' hidden></p>"
+            f"<div class='lmeta'><a class='chip' href='{folder_url(p.parent)}'>{icon('folder', 16)}{escape(folder_name)}</a>"
+            "<span class='sub' id='l-count'></span></div></div>"
             "<div class='seek'><span id='l-cur' class='time'>0:00</span>"
-            "<input id='l-seek' type='range' min='0' max='1000' value='0' step='1' aria-label='Position'>"
+            "<input id='l-seek' class='rng' type='range' min='0' max='1000' value='0' step='1' aria-label='Position'>"
             "<span id='l-dur' class='time'>0:00</span></div>"
             "<div class='ctrls'>"
-            f"<button id='b-shuffle' class='abtn' type='button' title='Lecture aléatoire (S)' aria-label='Lecture aléatoire' aria-pressed='false'>{icon('shuffle', 20)}</button>"
-            f"<button id='b-prev' class='abtn' type='button' title='Piste précédente (P)' aria-label='Piste précédente'>{icon('prev', 22)}</button>"
-            f"<button id='b-play' class='abtn big' type='button' title='Lecture / pause (espace)' aria-label='Lecture'>{icon('play', 28)}</button>"
-            f"<button id='b-next' class='abtn' type='button' title='Piste suivante (N)' aria-label='Piste suivante'>{icon('next', 22)}</button>"
-            f"<button id='b-repeat' class='abtn' type='button' title='Répétition (R)' aria-label='Répétition : désactivée'>{icon('repeat', 20)}</button>"
+            f"<button id='b-prev' class='abtn' type='button' title='Piste précédente (P)' aria-label='Piste précédente'>{icon('prev', 24)}</button>"
+            f"<button id='b-back' class='abtn' type='button' title='Reculer de 10 s (J)' aria-label='Reculer de 10 secondes'>{icon('back10', 24)}</button>"
+            f"<button id='b-play' class='abtn big' type='button' title='Lecture / pause (espace)' aria-label='Lecture'>{icon('play', 24)}</button>"
+            f"<button id='b-fwd' class='abtn' type='button' title='Avancer de 10 s (L)' aria-label='Avancer de 10 secondes'>{icon('fwd10', 24)}</button>"
+            f"<button id='b-next' class='abtn' type='button' title='Piste suivante (N)' aria-label='Piste suivante'>{icon('next', 24)}</button>"
             "</div>"
-            "<div class='extra'>"
-            f"<button id='b-mute' class='abtn sm' type='button' title='Muet (M)' aria-label='Muet'>{icon('volume', 18)}</button>"
-            "<input id='l-vol' type='range' min='0' max='100' value='100' step='1' aria-label='Volume'>"
+            "<div class='modes'>"
+            f"<button id='b-shuffle' class='abtn' type='button' title='Lecture aléatoire (S)' aria-label='Lecture aléatoire' aria-pressed='false'>{icon('shuffle', 24)}</button>"
+            f"<button id='b-repeat' class='abtn' type='button' title='Répétition (R)' aria-label='Répétition : désactivée' aria-pressed='false'>{icon('repeat', 24)}</button>"
             "<button id='b-rate' class='pill sm' type='button' title='Vitesse de lecture (&lt; et &gt;)'>1×</button>"
             f"<a class='pill sm' id='l-dl' href='#' title='Télécharger'>{icon('download', 16)}Télécharger</a>"
             "</div>"
+            "<div class='vol'>"
+            f"<button id='b-mute' class='abtn sm' type='button' title='Muet (M)' aria-label='Muet' aria-pressed='false'>{icon('volume', 18)}</button>"
+            "<input id='l-vol' class='rng' type='range' min='0' max='100' value='100' step='1' aria-label='Volume'>"
+            "</div>"
             "<div id='l-msg' class='sub lmsg' role='status'></div>"
-            "<details class='keys'><summary>Raccourcis clavier</summary><p class='hint'>"
+            "<details class='lkeys'><summary>Raccourcis clavier</summary><p class='hint'>"
             "<kbd>Espace</kbd> / <kbd>K</kbd> lecture-pause · <kbd>N</kbd> suivante · <kbd>P</kbd> précédente "
             "(ou début de la piste) · <kbd>S</kbd> aléatoire · <kbd>R</kbd> répétition (aucune, tout, une piste) · "
-            "<kbd>←</kbd> <kbd>→</kbd> ±5 s · <kbd>J</kbd> <kbd>L</kbd> ±10 s · <kbd>↑</kbd> <kbd>↓</kbd> volume · "
+            f"{kbd_icon('arrow_left')} {kbd_icon('arrow_right')} ±5 s · <kbd>J</kbd> <kbd>L</kbd> ±10 s · "
+            f"{kbd_icon('arrow_up')} {kbd_icon('arrow_down')} volume · "
             "<kbd>M</kbd> muet · <kbd>0</kbd>–<kbd>9</kbd> aller à 0–90 % · <kbd>&lt;</kbd> <kbd>&gt;</kbd> vitesse · "
             "<kbd>/</kbd> chercher dans la liste</p></details>"
             "</section>"
@@ -3590,7 +3902,8 @@ class FileHandler(BaseHTTPRequestHandler):
             "<div id='l-list' class='llist'></div></aside></main>"
             "<audio id='l-audio' preload='metadata'></audio>"
             f"<script>window.LCFG = {js_json(cfg)}; window.LICO = "
-            + js_json({n: icon(n, 20) for n in ("play", "pause", "repeat", "repeat1", "volume", "mute", "music")})
+            + js_json({n: icon(n, 24) for n in ("play", "pause", "repeat", "repeat1", "volume", "mute",
+                                                 "music", "loader", "eq")})
             + f"; {THEME_JS}{LISTEN_JS}</script></body></html>"
         )
         self.send_html(html)
@@ -3605,12 +3918,28 @@ class FileHandler(BaseHTTPRequestHandler):
 
     def serve_meta(self, rel):
         p = resolve_inside(rel)
-        if p is None or not p.is_file() or kind_of(p) != "video":
+        kind = kind_of(p) if p is not None and p.is_file() else None
+        if kind not in ("video", "audio"):
             self.send_error(404)
+            return
+        if kind == "audio":
+            with _sem:
+                info = audio_info(p)
+            self.send_json({"duration": info["duration"], "title": info["title"], "artist": info["artist"],
+                            "album": info["album"], "cover": has_cover(p, info)})
             return
         with _sem:
             dur = duration_of(p)
         self.send_json({"duration": dur})
+
+    def serve_cover(self, rel):
+        p = resolve_inside(rel)
+        c = cover_for(p) if p is not None and p.is_file() and kind_of(p) == "audio" else None
+        if c is None:
+            self.send_error(404)
+            return
+        ctype = "image/jpeg" if c.suffix.lower() in (".jpg", ".jpeg") else guess_mime(c)
+        self.send_file(c, ctype, None, {"Cache-Control": "private, max-age=86400"})
 
     def serve_sub(self, rel):
         p = resolve_inside(rel)
