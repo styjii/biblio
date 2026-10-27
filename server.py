@@ -176,6 +176,7 @@ ICONS.update({
     # indicateur « en cours de lecture » (3 barres animées en CSS)
     "eq": '<path class="b1" d="M6 20V11"/><path class="b2" d="M12 20V4"/><path class="b3" d="M18 20V14"/>',
     # aperçu Markdown
+    "unlock": '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
     "book": '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
     "list": '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
     "printer": '<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>'
@@ -395,37 +396,39 @@ BROWSE_JS = """
     wrap.hidden = false;
   }
 
-  // ----- suppression (mot de passe du .env)
+  // ----- suppression (déverrouillage requis ; aucun mot de passe n'est demandé ici)
   var delTarget = null;
+  function delPaint(){
+    var locked = !cfg.unlocked;
+    document.getElementById('del-locked').hidden = !locked;
+    document.getElementById('delok').hidden = locked;
+  }
   function askDelete(a){
     delTarget = a;
-    var pw = document.getElementById('delpw');
     document.getElementById('del-name').textContent = a.dataset.title;
     document.getElementById('delerr').textContent = '';
-    pw.value = '';
+    delPaint();
     document.getElementById('sheet-main').hidden = true;
     document.getElementById('deldlg').hidden = false;
-    setTimeout(function(){ pw.focus(); }, 50);
   }
   document.getElementById('delcancel').addEventListener('click', closeSheet);
   document.getElementById('delform').addEventListener('submit', function(e){
     e.preventDefault();
-    var pw = document.getElementById('delpw'), err = document.getElementById('delerr');
-    var btn = document.getElementById('delok');
-    if (!delTarget || !cfg.canDelete) return;
-    if (!pw.value) { err.textContent = 'Saisis le mot de passe.'; return; }
+    var err = document.getElementById('delerr'), btn = document.getElementById('delok');
+    if (!delTarget || !cfg.canDelete || !cfg.unlocked) return;
     btn.disabled = true; err.textContent = '';
-    fetch('/delete?f=' + delTarget.dataset.f, {
-      method: 'POST',
-      headers: {'X-Requested-With': 'biblio', 'Content-Type': 'text/plain; charset=utf-8'},
-      body: pw.value
-    }).then(function(r){ return r.json().then(function(j){ return {s: r.status, j: j}; }); })
+    fetch('/delete?f=' + delTarget.dataset.f, {method: 'POST', headers: {'X-Requested-With': 'biblio'}})
+      .then(function(r){ return r.json().then(function(j){ return {s: r.status, j: j}; }); })
       .then(function(x){
         btn.disabled = false;
-        if (!x.j.ok) { err.textContent = x.j.error || ('Erreur ' + x.s); pw.value = ''; pw.focus(); return; }
+        if (!x.j.ok) {
+          if (x.j.locked) { cfg.unlocked = false; delPaint(); return; }
+          err.textContent = x.j.error || ('Erreur ' + x.s);
+          return;
+        }
         location.reload();
       })
-      .catch(function(){ btn.disabled = false; err.textContent = 'Échec réseau, rien n\\u2019a été supprimé.'; });
+      .catch(function(){ btn.disabled = false; err.textContent = 'Échec réseau, rien n’a été supprimé.'; });
   });
 
   document.querySelectorAll('.fcard').forEach(function(a){
@@ -443,7 +446,7 @@ BROWSE_JS = """
   wrap.querySelectorAll('[data-close]').forEach(function(el){ el.addEventListener('click', closeSheet); });
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !wrap.hidden) closeSheet(); });
 
-  // ----- envoi de fichiers, vidéos et dossiers (mot de passe du .env)
+  // ----- envoi de fichiers, vidéos et dossiers (déverrouillage requis)
   var upBtn = document.getElementById('uploadbtn');
   if (upBtn) {
     var upTicket = null, upExpire = 0, upTtl = 0, upCancel = false, upXhr = null;
@@ -458,32 +461,29 @@ BROWSE_JS = """
       ['upform', 'uppick', 'uprun'].forEach(function(id){ upEl(id).hidden = (id !== step); });
     };
 
+    var upMsg = function(text){ upEl('uperr').textContent = text; upShow('upform'); };
+    var upLocked = function(){
+      cfg.unlocked = false; upTicket = null;
+      upMsg('Accès verrouillé : déverrouille l’accès (cadenas en haut de la page) pour envoyer des fichiers.');
+    };
+    var upGetTicket = function(){
+      upEl('uperr').textContent = '';
+      fetch('/upload-auth', {method: 'POST', headers: {'X-Requested-With': 'biblio'}})
+        .then(function(r){ return r.json().then(function(j){ return {s: r.status, j: j}; }); })
+        .then(function(x){
+          if (!x.j.ok) { if (x.j.locked) upLocked(); else upMsg(x.j.error || ('Erreur ' + x.s)); return; }
+          upTicket = x.j.ticket; upTtl = x.j.ttl * 1000; upExpire = Date.now() + upTtl - 30000;
+          upShow('uppick');
+        })
+        .catch(function(){ upMsg('Échec réseau.'); });
+    };
+
     upBtn.addEventListener('click', function(){
       upEl('sheet-main').hidden = true; upEl('newdlg').hidden = true; upEl('deldlg').hidden = true;
       upEl('updlg').hidden = false; wrap.hidden = false;
       upEl('up-dest').textContent = '/' + (cfg.folder || '');
-      upEl('uperr').textContent = ''; upEl('uppw').value = '';
-      if (upTicket && Date.now() < upExpire) upShow('uppick');
-      else { upShow('upform'); setTimeout(function(){ upEl('uppw').focus(); }, 50); }
-    });
-
-    upEl('upform').addEventListener('submit', function(e){
-      e.preventDefault();
-      var pw = upEl('uppw'), err = upEl('uperr'), b = upEl('upok');
-      if (!pw.value) { err.textContent = 'Saisis le mot de passe.'; return; }
-      b.disabled = true; err.textContent = '';
-      fetch('/upload-auth', {
-        method: 'POST',
-        headers: {'X-Requested-With': 'biblio', 'Content-Type': 'text/plain; charset=utf-8'},
-        body: pw.value
-      }).then(function(r){ return r.json().then(function(j){ return {s: r.status, j: j}; }); })
-        .then(function(x){
-          b.disabled = false; pw.value = '';
-          if (!x.j.ok) { err.textContent = x.j.error || ('Erreur ' + x.s); pw.focus(); return; }
-          upTicket = x.j.ticket; upTtl = x.j.ttl * 1000; upExpire = Date.now() + upTtl - 30000;
-          upShow('uppick');
-        })
-        .catch(function(){ b.disabled = false; err.textContent = 'Échec réseau.'; });
+      if (!cfg.unlocked) { upLocked(); return; }
+      if (upTicket && Date.now() < upExpire) upShow('uppick'); else upGetTicket();
     });
 
     upEl('up-pick-files').addEventListener('click', function(e){ e.preventDefault(); upEl('up-in-files').click(); });
@@ -566,9 +566,13 @@ BROWSE_JS = """
           sent += it.f.size;
           if (x.status === 200 && j.ok) { ok++; mark(it, 'ok', fmtB(it.f.size), 'check'); upExpire = Date.now() + upTtl - 30000; }
           else if (x.status === 409) { skipped++; mark(it, 'skip', j.error || 'déjà présent'); }
+          else if (j.code === 'locked') {
+            failed++; upTicket = null; cfg.unlocked = false; mark(it, 'bad', 'accès verrouillé');
+            return finish('accès verrouillé : déverrouille puis rouvre « Envoyer »');
+          }
           else if (j.code === 'ticket') {
             failed++; upTicket = null; mark(it, 'bad', 'session expirée');
-            return finish('mot de passe à saisir à nouveau (rouvre « Envoyer »)');
+            return finish('session d’envoi expirée (rouvre « Envoyer »)');
           }
           else { failed++; mark(it, 'bad', j.error || ('erreur ' + x.status)); }
           setBar(sent); next();
@@ -1128,6 +1132,80 @@ a.chip:hover,a.btn:hover{background:var(--accent-soft); border-color:var(--accen
 # --------------------------------------------------------------------------
 # Utilitaires
 # --------------------------------------------------------------------------
+CSS += """
+
+/* ---------- Verrouillage de l'accès ---------- */
+.ibtn.unlocked{color:var(--green); border-color:var(--green)}
+.lkveil{position:fixed; inset:0; z-index:90; display:grid; place-items:center; padding:16px; background:rgba(8,10,16,.55)}
+.lkbox{width:min(100%,380px); display:flex; flex-direction:column; gap:12px; padding:22px; border-radius:20px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow-hover)}
+.lkbox h2{margin:0; font-size:18px}
+.lkbox p{margin:0; color:var(--muted); font-size:14px}
+.lkbox input{padding:12px 14px; font:inherit; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:12px; outline:none}
+.lkbox input:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+.lkbox .lkerr{color:var(--red); min-height:1.3em}
+.lkbox .row{display:flex; gap:8px; justify-content:flex-end}
+"""
+
+LOCK_JS = r"""
+(function(){
+  var ICO = window.LKICO || {}, H = {'X-Requested-With': 'biblio'};
+  var btn = document.getElementById('lock-toggle');
+  var st = {enabled: false, unlocked: false};
+  function paint(){
+    if (!btn) return;
+    btn.hidden = !st.enabled;
+    btn.innerHTML = st.unlocked ? ICO.unlock : ICO.lock;
+    btn.classList.toggle('unlocked', st.unlocked);
+    var t = st.unlocked ? 'Accès déverrouillé : cliquer pour verrouiller' : 'Accès verrouillé : cliquer pour déverrouiller';
+    btn.title = t; btn.setAttribute('aria-label', t);
+  }
+  function post(url, body){
+    return fetch(url, {method: 'POST', credentials: 'same-origin', headers: H, body: body}).then(function(r){ return r.json(); });
+  }
+  function dialog(){
+    if (document.querySelector('.lkveil')) return;
+    var veil = document.createElement('div');
+    veil.className = 'lkveil';
+    veil.innerHTML = '<form class="lkbox" autocomplete="off"><h2>Déverrouiller l’accès</h2>' +
+      '<p>Le mot de passe n’est demandé qu’ici. Ensuite, la suppression, l’envoi de fichiers et le tableau de bord ne le redemandent plus, jusqu’au prochain verrouillage.</p>' +
+      '<input type="password" placeholder="Mot de passe" autocomplete="current-password" required>' +
+      '<p class="lkerr" role="alert"></p><div class="row"><button type="button" class="pill" data-x>Annuler</button>' +
+      '<button type="submit" class="pill primary">Déverrouiller</button></div></form>';
+    document.body.appendChild(veil);
+    var f = veil.firstChild, pw = f.querySelector('input'), err = f.querySelector('.lkerr'), go = f.querySelector('[type=submit]');
+    function close(){ veil.remove(); document.removeEventListener('keydown', onKey); }
+    function onKey(e){ if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', onKey);
+    veil.addEventListener('click', function(e){ if (e.target === veil) close(); });
+    f.querySelector('[data-x]').addEventListener('click', close);
+    f.addEventListener('submit', function(e){
+      e.preventDefault(); go.disabled = true; err.textContent = '';
+      post('/unlock', pw.value).then(function(j){
+        if (j.ok) { location.reload(); return; }
+        go.disabled = false; err.textContent = j.error || 'Erreur'; pw.value = ''; pw.focus();
+      }).catch(function(){ go.disabled = false; err.textContent = 'Connexion impossible.'; });
+    });
+    setTimeout(function(){ pw.focus(); }, 30);
+  }
+  if (btn) btn.addEventListener('click', function(){
+    if (!st.unlocked) { dialog(); return; }
+    post('/lock').then(function(){ location.reload(); });
+  });
+  document.addEventListener('click', function(e){
+    var t = e.target.closest ? e.target.closest('[data-unlock]') : null;
+    if (t) { e.preventDefault(); dialog(); }
+  });
+  fetch('/lock-state', {credentials: 'same-origin'}).then(function(r){ return r.json(); })
+    .then(function(x){ st = x; paint(); }).catch(function(){});
+})();
+"""
+
+
+def lock_script():
+    ico = {n: icon(n, 20) for n in ("lock", "unlock")}
+    return f"<script>window.LKICO = {js_json(ico)}; {LOCK_JS}</script>"
+
+
 def natural_key(p):
     return [int(t) if t.isdigit() else t.casefold() for t in re.split(r"(\d+)", p.name)]
 
@@ -1357,6 +1435,7 @@ def check_password(ip, given, expected=None):
     """Vérifie un mot de passe (par défaut celui de suppression), avec verrouillage par adresse IP.
     -> (ok, message)"""
     expected = PASSWORD if expected is None else expected
+    candidates = [e for e in ([expected] if isinstance(expected, str) else expected) if e]
     now = time.monotonic()
     with _auth_lock:
         count, until = _auth_fails.get(ip, (0, 0.0))
@@ -1366,7 +1445,7 @@ def check_password(ip, given, expected=None):
             count = 0
         count += 1                      # l'essai est compté avant la vérification (essais parallèles)
         _auth_fails[ip] = (count, now + LOCK_SECONDS if count >= MAX_FAILS else 0.0)
-    ok = bool(expected) and hmac.compare_digest(given.encode("utf-8", "replace"), expected.encode("utf-8", "replace"))
+    ok = any([hmac.compare_digest(given.encode("utf-8", "replace"), e.encode("utf-8", "replace")) for e in candidates])
     if ok:
         with _auth_lock:
             _auth_fails.pop(ip, None)
@@ -1430,42 +1509,36 @@ _dev_lock = threading.Lock()
 _devices = {}                      # ip -> {first, last, hits, ua, auth}
 _blocked = {}                      # ip -> date du blocage (time.time())
 
-DASH_TTL = 30 * 60                 # inactivité maximale d'une session du tableau de bord
-_dash_lock = threading.Lock()
-_dash_sessions = {}                # identifiant de session -> expiration (monotonic)
+_unlock_lock = threading.Lock()
+_unlocked = {}                     # identifiant de session -> {"files", "dash"} ; en mémoire : tout est verrouillé au redémarrage
 
 
-def issue_dash_session():
-    now = time.monotonic()
-    with _dash_lock:
-        for s in [s for s, exp in _dash_sessions.items() if exp < now]:
-            del _dash_sessions[s]
-        while len(_dash_sessions) >= 20:
-            del _dash_sessions[min(_dash_sessions, key=_dash_sessions.get)]
-        sid = secrets.token_urlsafe(24)
-        _dash_sessions[sid] = now + DASH_TTL
+def unlock_scopes(sid):
+    """Parties déverrouillées de cette session : "files" (suppression, envoi) et/ou "dash" (tableau de bord)."""
+    if not sid:
+        return set()
+    with _unlock_lock:
+        return set(_unlocked.get(sid, ()))
+
+
+def grant_unlock(sid, scopes):
+    with _unlock_lock:
+        if sid not in _unlocked:
+            while len(_unlocked) >= 50:
+                del _unlocked[next(iter(_unlocked))]
+            sid = secrets.token_urlsafe(24)
+            _unlocked[sid] = set()
+        _unlocked[sid] |= set(scopes)
     return sid
 
 
 def use_dash_session(sid, touch=True):
-    """Vrai si la session est valide. Les actions (touch) prolongent sa validité ; l'actualisation
-    automatique de la page, non : un onglet oublié finit donc par se verrouiller."""
-    if not sid:
-        return False
-    now = time.monotonic()
-    with _dash_lock:
-        exp = _dash_sessions.get(sid)
-        if exp is None or exp < now:
-            _dash_sessions.pop(sid, None)
-            return False
-        if touch:
-            _dash_sessions[sid] = now + DASH_TTL
-    return True
+    return "dash" in unlock_scopes(sid)
 
 
 def drop_dash_session(sid):
-    with _dash_lock:
-        _dash_sessions.pop(sid, None)
+    with _unlock_lock:
+        _unlocked.pop(sid, None)
 
 
 def short_ua(ua):
@@ -2769,16 +2842,17 @@ def doc_open(title, body_class="", extra_css=""):
     )
 
 
-def topbar(with_search):
+def topbar(with_search, lock=False):
     search = ""
     if with_search:
         search = (f"<label class='search'>{icon('search', 18)}"
                   "<input id='search' type='search' autocomplete='off' "
                   "placeholder='Rechercher dans ce dossier…'></label>")
+    lockbtn = "<button id='lock-toggle' class='ibtn' type='button' hidden aria-label='Verrouillage'></button>" if lock else ""
     return (
         "<header class='topbar'><a class='brand' href='/'>"
         f"<span class='logo'>{icon('library', 22)}</span><span>Ma bibliothèque</span></a>"
-        f"{search}{theme_button()}"
+        f"{search}{theme_button()}{lockbtn}"
         "<a class='ibtn' href='/dashboard' title='Tableau de bord' aria-label='Tableau de bord'>"
         f"{icon('dashboard', 20)}</a></header>"
     )
@@ -3116,32 +3190,6 @@ DASH_CSS = """
 .dash-login input:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
 .dash-login .pill{margin:0}
 .dash-err{margin:12px 0 0; color:var(--red)}
-"""
-
-DASH_LOGIN_JS = """
-(function(){
-  var f = document.getElementById('login');
-  var pwd = document.getElementById('pwd');
-  var err = document.getElementById('err');
-  var btn = document.getElementById('go');
-  function fail(msg){
-    err.textContent = msg; err.hidden = false; btn.disabled = false;
-  }
-  f.addEventListener('submit', function(e){
-    e.preventDefault();
-    btn.disabled = true; err.hidden = true;
-    fetch('/dashboard/login', {
-      method: 'POST', credentials: 'same-origin', body: pwd.value,
-      headers: {'X-Requested-With': 'biblio', 'Content-Type': 'text/plain; charset=utf-8'}
-    })
-      .then(function(r){ return r.json(); })
-      .then(function(j){
-        if (j.ok) { location.reload(); return; }
-        fail(j.error || 'Erreur'); pwd.select();
-      })
-      .catch(function(){ fail('Connexion impossible.'); });
-  });
-})();
 """
 
 DASH_JS = """
@@ -3521,7 +3569,7 @@ DASH_JS = """
       .then(function(){ busy = false; });
   }
   $('lock').addEventListener('click', function(){
-    fetch('/dashboard/logout', {method: 'POST', headers: H, credentials: 'same-origin'})
+    fetch('/lock', {method: 'POST', headers: H, credentials: 'same-origin'})
       .then(function(){ location.reload(); });
   });
   hsel.addEventListener('change', loadHistory);
@@ -3537,17 +3585,14 @@ DASH_JS = """
 
 
 def dashboard_page(unlocked):
-    parts = [doc_open("Tableau de bord — Ma bibliothèque", "", DASH_CSS), topbar(False)]
+    parts = [doc_open("Tableau de bord — Ma bibliothèque", "", DASH_CSS), topbar(False, True)]
     if not unlocked:
         parts.append(
             "<main><div class='msgcard dash-login'>"
             f"<div class='ico code'>{icon('lock', 24)}</div>"
-            "<h1>Tableau de bord</h1><p>Entre le mot de passe pour continuer.</p>"
-            "<form id='login'><input id='pwd' type='password' placeholder='Mot de passe' "
-            "autocomplete='current-password' required autofocus>"
-            "<button id='go' class='pill primary' type='submit'>Déverrouiller</button></form>"
-            "<p id='err' class='dash-err' role='alert' hidden></p></div></main>"
-            f"<script>{THEME_JS}{DASH_LOGIN_JS}</script></body></html>")
+            "<h1>Accès verrouillé</h1><p>Le tableau de bord est verrouillé. Déverrouille l'accès pour le consulter.</p>"
+            "<button class='pill primary' type='button' data-unlock style='margin-top:16px'>Déverrouiller</button></div></main>"
+            f"<script>{THEME_JS}</script>{lock_script()}</body></html>")
         return "".join(parts)
     cfg = {"monitor": icon("monitor", 22), "ban": icon("ban", 22),
            "cats": [{"id": i, "label": label, "color": color} for i, label, color in ACTIVITY_CATS]}
@@ -3582,7 +3627,7 @@ def dashboard_page(unlocked):
         "<div class='hcard'><h3>Fichiers les plus consultés</h3><div id='h-top'></div></div></div>"
         "<div class='hcard'><h3>Historique des actions</h3><div class='h-list' id='h-list'></div></div></div>"
         "</section></main>"
-        f"<script>window.DCFG = {js_json(cfg)}; {THEME_JS}{DASH_JS}</script></body></html>")
+        f"<script>window.DCFG = {js_json(cfg)}; {THEME_JS}{DASH_JS}</script>{lock_script()}</body></html>")
     return "".join(parts)
 
 
@@ -4083,7 +4128,7 @@ LISTEN_JS = """
 # --------------------------------------------------------------------------
 # Serveur
 # --------------------------------------------------------------------------
-DASH_POSTS = ("/dashboard/login", "/dashboard/logout", "/dashboard/block", "/dashboard/unblock")
+DASH_POSTS = ("/dashboard/block", "/dashboard/unblock")
 
 
 class FileHandler(BaseHTTPRequestHandler):
@@ -4209,7 +4254,7 @@ class FileHandler(BaseHTTPRequestHandler):
             c.load(self.headers.get("Cookie", ""))
         except Exception:
             return ""
-        m = c.get("fl_dash")
+        m = c.get("fl_unlock")
         return m.value if m else ""
 
     # ----- routage
@@ -4251,6 +4296,8 @@ class FileHandler(BaseHTTPRequestHandler):
                 self.route_raw(arg("f"), arg("dl") == "1")
             elif path == "/static/editor.js":
                 self.route_bundle()
+            elif path == "/lock-state":
+                self.route_lock_state()
             elif path == "/watch":
                 self.page_watch(arg("f"))
             elif path == "/listen":
@@ -4284,7 +4331,7 @@ class FileHandler(BaseHTTPRequestHandler):
         req = urlsplit(self.path)
         q = parse_qs(req.query)
         try:
-            if req.path not in ("/save", "/delete", "/upload-auth", "/upload") + DASH_POSTS:
+            if req.path not in ("/save", "/delete", "/upload-auth", "/upload", "/unlock", "/lock") + DASH_POSTS:
                 self.send_error(404)
                 return
             if not self.has_cookie() or self.headers.get("X-Requested-With") != "biblio":
@@ -4292,6 +4339,10 @@ class FileHandler(BaseHTTPRequestHandler):
                 return
             if req.path in DASH_POSTS:
                 self.route_dash_post(req.path, q)
+            elif req.path == "/unlock":
+                self.route_unlock()
+            elif req.path == "/lock":
+                self.route_lock()
             elif req.path == "/delete":
                 self.route_delete(q)
             elif req.path == "/upload-auth":
@@ -4324,7 +4375,7 @@ class FileHandler(BaseHTTPRequestHandler):
             kind = card_kind(f)
             grouped.setdefault(group_of(kind), []).append((f, kind))
         has_content = bool(folders or files)
-        parts = [doc_open(f"{title} — Ma bibliothèque"), topbar(has_content), "<main>"]
+        parts = [doc_open(f"{title} — Ma bibliothèque"), topbar(has_content, True), "<main>"]
 
         parts.append("<nav class='crumb'>")
         parts.append(f"<a class='{'current' if not relative.parts else ''}' href='/'>"
@@ -4418,7 +4469,8 @@ class FileHandler(BaseHTTPRequestHandler):
             f"{icon('trash', 22)}</div><div class='text'><div class='name'>Supprimer ce fichier ?</div>"
             "<div class='sub' id='del-name'></div></div>"
             f"<button class='ibtn' data-close type='button' aria-label='Fermer'>{icon('close', 18)}</button></div>"
-            "<form id='delform'><input id='delpw' type='password' placeholder='Mot de passe' autocomplete='off'>"
+            "<form id='delform'><p id='del-locked' class='sub' role='status' hidden>Accès verrouillé : déverrouille l'accès "
+            "(cadenas en haut de la page) pour supprimer ce fichier.</p>"
             "<div id='delerr' class='err'></div>"
             f"<button id='delok' class='pill danger' type='submit' style='justify-content:center'>{icon('trash', 16)}Supprimer définitivement</button>"
             "<button id='delcancel' class='pill' type='button' style='justify-content:center'>Annuler</button>"
@@ -4427,9 +4479,7 @@ class FileHandler(BaseHTTPRequestHandler):
             f"{icon('upload', 22)}</div><div class='text'><div class='name'>Envoyer dans ce dossier</div>"
             "<div class='sub' id='up-dest'></div></div>"
             f"<button class='ibtn' data-close type='button' aria-label='Fermer'>{icon('close', 18)}</button></div>"
-            "<form id='upform'><input id='uppw' type='password' placeholder='Mot de passe' autocomplete='off'>"
-            "<div id='uperr' class='err'></div>"
-            "<button id='upok' class='pill primary' type='submit' style='justify-content:center'>Continuer</button></form>"
+            "<div id='upform' hidden><p id='uperr' class='sub' role='status'></p></div>"
             "<div id='uppick' hidden>"
             "<label class='switch'><input type='checkbox' id='upover'><span class='track'></span>Remplacer les fichiers existants</label>"
             f"<a class='opt' href='#' id='up-pick-files'><span class='ico back'>{icon('file', 22)}</span>"
@@ -4445,10 +4495,11 @@ class FileHandler(BaseHTTPRequestHandler):
             "<button id='up-done' class='pill primary' type='button' style='justify-content:center' hidden>Terminer</button></div>"
             "</div></div></div>")
 
-        cfg = {"readonly": READONLY, "canDelete": bool(PASSWORD) and not READONLY, "maxUpload": MAX_UPLOAD, "folder": relative.as_posix() if relative.parts else ""}
+        cfg = {"readonly": READONLY, "canDelete": bool(PASSWORD) and not READONLY,
+               "unlocked": "files" in unlock_scopes(self.dash_session_id()), "maxUpload": MAX_UPLOAD, "folder": relative.as_posix() if relative.parts else ""}
         icons_js = {n: icon(n, 22) for n in ICONS}
         parts.append(f"<script>window.FLCFG = {js_json(cfg)}; window.ICO = {js_json(icons_js)};"
-                     f"{THEME_JS}{DECORATE_JS}{BROWSE_JS}</script></body></html>")
+                     f"{THEME_JS}{DECORATE_JS}{BROWSE_JS}</script>{lock_script()}</body></html>")
         self.send_html("".join(parts))
 
     # ----- lecture / édition
@@ -4997,24 +5048,15 @@ class FileHandler(BaseHTTPRequestHandler):
                         "lines": text.count("\n") + 1})
 
     def route_delete(self, q):
-        """POST /delete?f=<chemin> ; corps : mot de passe (BIBLIO_PASSWORD du .env)."""
+        """POST /delete?f=<chemin> ; l'accès doit être déverrouillé (cadenas), aucun mot de passe n'est lu ici."""
         if READONLY:
             self.send_json({"ok": False, "error": "Mode lecture seule"}, 403)
             return
         if not PASSWORD:
             self.send_json({"ok": False, "error": "Suppression désactivée : BIBLIO_PASSWORD absent du .env"}, 403)
             return
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            length = -1
-        if length < 0 or length > 1024:
-            self.send_json({"ok": False, "error": "Requête invalide"}, 400)
-            return
-        given = self.rfile.read(length).decode("utf-8", "replace")
-        ok, msg = check_password(self.client_address[0], given)
-        if not ok:
-            self.send_json({"ok": False, "error": msg}, 429 if msg.startswith("Trop") else 403)
+        if "files" not in unlock_scopes(self.dash_session_id()):
+            self.send_json({"ok": False, "error": "Accès verrouillé", "locked": True}, 403)
             return
 
         p = resolve_inside(q.get("f", [""])[0])
@@ -5034,7 +5076,41 @@ class FileHandler(BaseHTTPRequestHandler):
             return
         self.send_json({"ok": True})
 
-    # ----- tableau de bord (mot de passe -> session -> données, blocage)
+    # ----- verrouillage : le mot de passe n'est demandé qu'ici, pour déverrouiller
+    def route_lock_state(self):
+        scopes = unlock_scopes(self.dash_session_id())
+        self.send_json({"enabled": bool(PASSWORD or DASH_PASSWORD), "unlocked": bool(scopes),
+                        "files": "files" in scopes, "dash": "dash" in scopes})
+
+    def route_unlock(self):
+        """POST /unlock ; corps : mot de passe (BIBLIO_PASSWORD ou BIBLIO_DASHBOARD_PASSWORD) -> session déverrouillée."""
+        if not (PASSWORD or DASH_PASSWORD):
+            self.send_json({"ok": False, "error": "Verrouillage désactivé : aucun mot de passe dans le .env"}, 403)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = -1
+        if length < 0 or length > 1024:
+            self.send_json({"ok": False, "error": "Requête invalide"}, 400)
+            return
+        given = self.rfile.read(length).decode("utf-8", "replace")
+        ok, msg = check_password(self.client_address[0], given, [PASSWORD, DASH_PASSWORD])
+        if not ok:
+            self.send_json({"ok": False, "error": msg}, 429 if msg.startswith("Trop") else 403)
+            return
+        raw = given.encode("utf-8", "replace")
+        scopes = {scope for scope, pw in (("files", PASSWORD), ("dash", DASH_PASSWORD))
+                  if pw and hmac.compare_digest(raw, pw.encode("utf-8", "replace"))}
+        sid = grant_unlock(self.dash_session_id(), scopes)
+        self.send_json({"ok": True, "files": "files" in scopes, "dash": "dash" in scopes},
+                       extra={"Set-Cookie": f"fl_unlock={sid}; Path=/; HttpOnly; SameSite=Strict"})
+
+    def route_lock(self):
+        drop_dash_session(self.dash_session_id())
+        self.send_json({"ok": True}, extra={"Set-Cookie": "fl_unlock=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"})
+
+    # ----- tableau de bord (accès déverrouillé -> données, blocage)
     def page_dashboard(self):
         if not DASH_PASSWORD:
             self.send_html(message_page(
@@ -5046,7 +5122,7 @@ class FileHandler(BaseHTTPRequestHandler):
 
     def route_dash_data(self):
         if not use_dash_session(self.dash_session_id(), touch=False):
-            self.send_json({"ok": False, "error": "Session expirée"}, 401)
+            self.send_json({"ok": False, "error": "Accès verrouillé"}, 401)
             return
         rows = device_rows(self.client_address[0])
         self.send_json({
@@ -5057,7 +5133,7 @@ class FileHandler(BaseHTTPRequestHandler):
 
     def route_dash_history(self, q):
         if not use_dash_session(self.dash_session_id(), touch=False):
-            self.send_json({"ok": False, "error": "Session expirée"}, 401)
+            self.send_json({"ok": False, "error": "Accès verrouillé"}, 401)
             return
         ip = q.get("ip", ["all"])[0]
         if ip != "all":
@@ -5069,32 +5145,9 @@ class FileHandler(BaseHTTPRequestHandler):
         self.send_json(history_report(ip, q.get("range", ["24h"])[0]))
 
     def route_dash_post(self, path, q):
-        """POST /dashboard/login (corps : mot de passe), /logout, /block?ip=…, /unblock?ip=…"""
-        cookie = "fl_dash={}; Path=/dashboard; HttpOnly; SameSite=Strict; Max-Age={}"
-        if path == "/dashboard/login":
-            if not DASH_PASSWORD:
-                self.send_json({"ok": False, "error": "Tableau de bord désactivé : mot de passe absent du .env"}, 403)
-                return
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-            except ValueError:
-                length = -1
-            if length < 0 or length > 1024:
-                self.send_json({"ok": False, "error": "Requête invalide"}, 400)
-                return
-            given = self.rfile.read(length).decode("utf-8", "replace")
-            ok, msg = check_password(self.client_address[0], given, DASH_PASSWORD)
-            if not ok:
-                self.send_json({"ok": False, "error": msg}, 429 if msg.startswith("Trop") else 403)
-                return
-            self.send_json({"ok": True}, extra={"Set-Cookie": cookie.format(issue_dash_session(), DASH_TTL)})
-            return
-        if path == "/dashboard/logout":
-            drop_dash_session(self.dash_session_id())
-            self.send_json({"ok": True}, extra={"Set-Cookie": cookie.format("", 0)})
-            return
+        """POST /dashboard/block?ip=…, /dashboard/unblock?ip=… (accès déverrouillé requis)."""
         if not use_dash_session(self.dash_session_id()):
-            self.send_json({"ok": False, "error": "Session expirée, reconnecte-toi."}, 401)
+            self.send_json({"ok": False, "error": "Accès verrouillé", "locked": True}, 401)
             return
         ok, err, warning = set_blocked(q.get("ip", [""])[0], path == "/dashboard/block", self.client_address[0])
         if not ok:
@@ -5120,24 +5173,15 @@ class FileHandler(BaseHTTPRequestHandler):
         self.send_json({"ok": False, "error": msg, "code": code}, status)
 
     def route_upload_auth(self):
-        """POST /upload-auth ; corps : mot de passe -> jeton d'envoi."""
+        """POST /upload-auth ; l'accès doit être déverrouillé -> jeton d'envoi."""
         if READONLY:
             self.send_json({"ok": False, "error": "Mode lecture seule"}, 403)
             return
         if not PASSWORD:
             self.send_json({"ok": False, "error": "Envoi désactivé : BIBLIO_PASSWORD absent du .env"}, 403)
             return
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            length = -1
-        if length < 0 or length > 1024:
-            self.send_json({"ok": False, "error": "Requête invalide"}, 400)
-            return
-        given = self.rfile.read(length).decode("utf-8", "replace")
-        ok, msg = check_password(self.client_address[0], given)
-        if not ok:
-            self.send_json({"ok": False, "error": msg}, 429 if msg.startswith("Trop") else 403)
+        if "files" not in unlock_scopes(self.dash_session_id()):
+            self.send_json({"ok": False, "error": "Accès verrouillé", "locked": True}, 403)
             return
         self.send_json({"ok": True, "ticket": issue_ticket(), "ttl": TICKET_TTL})
 
@@ -5158,8 +5202,10 @@ class FileHandler(BaseHTTPRequestHandler):
             return self.upload_error(length, "Mode lecture seule", 403)
         if not PASSWORD:
             return self.upload_error(length, "Envoi désactivé : BIBLIO_PASSWORD absent du .env", 403)
+        if "files" not in unlock_scopes(self.dash_session_id()):
+            return self.upload_error(length, "Accès verrouillé", 403, "locked")
         if not use_ticket(self.headers.get("X-Upload-Ticket", "")):
-            return self.upload_error(length, "Session d'envoi expirée : saisis à nouveau le mot de passe", 403, "ticket")
+            return self.upload_error(length, "Session d'envoi expirée : rouvre « Envoyer »", 403, "ticket")
         if MAX_UPLOAD and length > MAX_UPLOAD:
             return self.upload_error(length, f"Fichier trop volumineux (maximum {fmt_size(MAX_UPLOAD)})", 413)
 
