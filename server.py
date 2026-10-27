@@ -28,7 +28,7 @@ ROOT = Path(os.environ.get("BIBLIO_DOCS", Path.cwd())).resolve()
 PORT = int(os.environ.get("BIBLIO_PORT", "8088"))
 READONLY = False
 TOKEN = ""
-PASSWORD = ""      # BIBLIO_PASSWORD (.env) : vide = suppression de fichiers désactivée
+PASSWORD = ""      # BIBLIO_PASSWORD (.env) : vide = suppression, renommage et envoi désactivés (aucun déverrouillage possible)
 DASH_PASSWORD = ""   # BIBLIO_DASHBOARD_PASSWORD (.env), à défaut BIBLIO_PASSWORD : vide = tableau de bord désactivé
 ENV_PATH = None    # fichier .env (jeton, mot de passe)
 ENV = {}           # valeurs lues dans le .env
@@ -176,6 +176,8 @@ ICONS.update({
     # indicateur « en cours de lecture » (3 barres animées en CSS)
     "eq": '<path class="b1" d="M6 20V11"/><path class="b2" d="M12 20V4"/><path class="b3" d="M18 20V14"/>',
     # aperçu Markdown
+    "rename": '<path d="M5 4h1a3 3 0 0 1 3 3 3 3 0 0 1 3-3h1"/><path d="M13 20h-1a3 3 0 0 1-3-3 3 3 0 0 1-3 3H5"/>'
+              '<path d="M5 16H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h1"/><path d="M13 8h7a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-7"/><path d="M9 7v10"/>',
     "unlock": '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
     "book": '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
     "list": '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
@@ -344,17 +346,18 @@ BROWSE_JS = """
     watch:    {ic:'play',     t:'Regarder',           d:'Lire la vidéo',                        u:function(f){return '/watch?f='+f;}},
     pdf:      {ic:'file',     t:'Lire le PDF',        d:'Ouvrir dans le lecteur PDF',           u:function(f){return '/pdf?f='+f;}},
     view:     {ic:'eye',      t:'Lire',               d:'Affichage avec coloration syntaxique', u:function(f){return '/view?f='+f;}},
-    edit:     {ic:'edit',     t:'Éditer',             d:'Éditeur de type Vim',                  u:function(f){return '/edit?f='+f;}},
+    edit:     {ic:'edit',     t:'Éditer',             d:'Éditeur de type Vim',                  u:function(f){return '/edit?f='+f;}, prot:true},
     preview:  {ic:'globe',    t:'Aperçu de la page',  d:'Afficher la page web rendue',          u:function(f){return '/preview?f='+f;}},
     mdview:   {ic:'book',     t:'Aperçu',             d:'Rendu Markdown, mis en page pour la lecture', u:function(f){return '/preview?f='+f;}},
     mdsrc:    {ic:'code',     t:'Source',             d:'Texte brut avec coloration syntaxique', u:function(f){return '/view?f='+f;}},
     listen:   {ic:'music',    t:'Écouter',            d:'Lecteur audio (aléatoire, répétition…)', u:function(f){return '/listen?f='+f;}},
     open:     {ic:'external', t:'Ouvrir',             d:'Afficher dans le navigateur',          u:function(f){return '/raw?f='+f;}},
     download: {ic:'download', t:'Télécharger',        d:'Enregistrer une copie',                u:function(f){return '/raw?dl=1&f='+f;}},
-    del:      {ic:'trash',    t:'Supprimer',          d:'Protégé par mot de passe',             u:null, danger:true}
+    rename:   {ic:'rename',   t:'Renommer',           d:'Changer le nom du fichier',            u:null, prot:true},
+    del:      {ic:'trash',    t:'Supprimer',          d:'Supprimer définitivement',             u:null, danger:true, prot:true}
   };
   var BY = {
-    video:['watch','download'], pdf:['pdf','open','download'], text:['view','edit','download'],
+    video:['watch','open','download'], pdf:['pdf','open','download'], text:['view','edit','download'],
     web:['preview','view','edit','download'], image:['open','download'], audio:['listen','open','download'],
     binary:['download'], md:['mdview','mdsrc','edit','download']
   };
@@ -366,6 +369,7 @@ BROWSE_JS = """
     if (upRunning) return;
     var reload = upDirty;
     wrap.hidden = true; document.getElementById('newdlg').hidden = true; document.getElementById('deldlg').hidden = true;
+    document.getElementById('rendlg').hidden = true; document.getElementById('edtdlg').hidden = true;
     document.getElementById('updlg').hidden = true; bodyEl.innerHTML = '';
     if (reload) location.reload();
   }
@@ -376,7 +380,7 @@ BROWSE_JS = """
     var list = (a.dataset.md === '1' ? BY.md : (BY[kind] || ['view','edit','download'])).filter(function(k){
       return !(cfg.readonly && k === 'edit');
     });
-    if (cfg.canDelete) list.push('del');
+    if (cfg.canDelete) list.push('rename', 'del');
     document.getElementById('sh-title').textContent = a.dataset.title;
     document.getElementById('sh-sub').textContent = a.dataset.size;
     var ic = document.getElementById('sh-ico');
@@ -384,14 +388,23 @@ BROWSE_JS = """
     ic.className = 'ico ' + (a.dataset.icls || '');
     bodyEl.innerHTML = list.map(function(k){
       var o = OPTS[k];
-      return '<a class="opt' + (o.danger ? ' danger" data-del="1' : '') + '" href="' + (o.u ? o.u(f) : '#') + '"><span class="ico back">' + ICO[o.ic] + '</span>' +
-        '<span class="text"><span class="name">' + esc(o.t) + '</span><div class="sub">' + esc(o.d) + '</div></span>' +
+      var desc = (o.prot && cfg.protect && !cfg.unlocked) ? 'Accès verrouillé' : o.d;
+      return '<a class="opt' + (o.danger ? ' danger" data-del="1' : (k === 'rename' ? '" data-ren="1' : (k === 'edit' ? '" data-edt="1' : ''))) + '" href="' + (o.u ? o.u(f) : '#') + '"><span class="ico back">' + ICO[o.ic] + '</span>' +
+        '<span class="text"><span class="name">' + esc(o.t) + '</span><div class="sub">' + esc(desc) + '</div></span>' +
         '<span class="go">' + ICO.chevron + '</span></a>';
     }).join('');
     var dl = bodyEl.querySelector('[data-del]');
     if (dl) dl.addEventListener('click', function(e){ e.preventDefault(); askDelete(a); });
+    var rn = bodyEl.querySelector('[data-ren]');
+    if (rn) rn.addEventListener('click', function(e){ e.preventDefault(); askRename(a); });
+    var ed = bodyEl.querySelector('[data-edt]');
+    if (ed) ed.addEventListener('click', function(e){
+      if (cfg.protect && !cfg.unlocked) { e.preventDefault(); askEdit(a); }
+    });
+    document.getElementById('rendlg').hidden = true;
     document.getElementById('newdlg').hidden = true;
     document.getElementById('deldlg').hidden = true;
+    document.getElementById('edtdlg').hidden = true;
     document.getElementById('sheet-main').hidden = false;
     wrap.hidden = false;
   }
@@ -430,6 +443,60 @@ BROWSE_JS = """
       })
       .catch(function(){ btn.disabled = false; err.textContent = 'Échec réseau, rien n’a été supprimé.'; });
   });
+
+  // ----- renommage (déverrouillage requis ; aucun mot de passe n'est demandé ici)
+  var renTarget = null;
+  function renPaint(){
+    var locked = !cfg.unlocked;
+    document.getElementById('ren-locked').hidden = !locked;
+    document.getElementById('rennew').hidden = locked;
+    document.getElementById('renok').hidden = locked;
+  }
+  function askRename(a){
+    renTarget = a;
+    var inp = document.getElementById('rennew');
+    document.getElementById('ren-name').textContent = a.dataset.title;
+    document.getElementById('renerr').textContent = '';
+    inp.value = a.dataset.title;
+    renPaint();
+    document.getElementById('sheet-main').hidden = true;
+    document.getElementById('rendlg').hidden = false;
+    if (cfg.unlocked) setTimeout(function(){
+      inp.focus();
+      var dot = inp.value.lastIndexOf('.');
+      inp.setSelectionRange(0, dot > 0 ? dot : inp.value.length);
+    }, 30);
+  }
+  document.getElementById('rencancel').addEventListener('click', closeSheet);
+  document.getElementById('renform').addEventListener('submit', function(e){
+    e.preventDefault();
+    var err = document.getElementById('renerr'), btn = document.getElementById('renok');
+    var name = document.getElementById('rennew').value.trim();
+    if (!renTarget || !cfg.canDelete || !cfg.unlocked) return;
+    if (!name) { err.textContent = 'Saisis un nom.'; return; }
+    if (name === renTarget.dataset.title) { closeSheet(); return; }
+    btn.disabled = true; err.textContent = '';
+    fetch('/rename?f=' + renTarget.dataset.f + '&to=' + encodeURIComponent(name), {method: 'POST', headers: {'X-Requested-With': 'biblio'}})
+      .then(function(r){ return r.json().then(function(j){ return {s: r.status, j: j}; }); })
+      .then(function(x){
+        btn.disabled = false;
+        if (!x.j.ok) {
+          if (x.j.locked) { cfg.unlocked = false; renPaint(); return; }
+          err.textContent = x.j.error || ('Erreur ' + x.s);
+          return;
+        }
+        location.reload();
+      })
+      .catch(function(){ btn.disabled = false; err.textContent = 'Échec réseau, le fichier n’a pas été renommé.'; });
+  });
+
+  // ----- édition (déverrouillage requis ; aucun mot de passe n'est demandé ici : on indique seulement que c'est verrouillé)
+  function askEdit(a){
+    document.getElementById('edt-name').textContent = a.dataset.title;
+    document.getElementById('sheet-main').hidden = true;
+    document.getElementById('edtdlg').hidden = false;
+  }
+  document.getElementById('edtcancel').addEventListener('click', closeSheet);
 
   document.querySelectorAll('.fcard').forEach(function(a){
     a.addEventListener('click', function(e){
@@ -479,13 +546,14 @@ BROWSE_JS = """
     };
 
     upBtn.addEventListener('click', function(){
-      upEl('sheet-main').hidden = true; upEl('newdlg').hidden = true; upEl('deldlg').hidden = true;
+      upEl('sheet-main').hidden = true; upEl('newdlg').hidden = true; upEl('deldlg').hidden = true; upEl('rendlg').hidden = true; upEl('edtdlg').hidden = true;
       upEl('updlg').hidden = false; wrap.hidden = false;
       upEl('up-dest').textContent = '/' + (cfg.folder || '');
       if (!cfg.unlocked) { upLocked(); return; }
       if (upTicket && Date.now() < upExpire) upShow('uppick'); else upGetTicket();
     });
 
+    upEl('upcancel').addEventListener('click', closeSheet);
     upEl('up-pick-files').addEventListener('click', function(e){ e.preventDefault(); upEl('up-in-files').click(); });
     upEl('up-pick-dir').addEventListener('click', function(e){ e.preventDefault(); upEl('up-in-dir').click(); });
     ['up-in-files', 'up-in-dir'].forEach(function(id){
@@ -593,12 +661,17 @@ BROWSE_JS = """
       document.getElementById('deldlg').hidden = true;
       document.getElementById('newdlg').hidden = false;
       wrap.hidden = false;
-      var inp = document.getElementById('newname');
+      var inp = document.getElementById('newname'), nlock = !!cfg.protect && !cfg.unlocked;
+      document.getElementById('rendlg').hidden = true; document.getElementById('edtdlg').hidden = true;
+      document.getElementById('new-locked').hidden = !nlock;
+      inp.hidden = nlock; document.getElementById('newok').hidden = nlock;
       inp.value = ''; document.getElementById('newerr').textContent = '';
-      setTimeout(function(){ inp.focus(); }, 50);
+      if (!nlock) setTimeout(function(){ inp.focus(); }, 50);
     });
+    document.getElementById('newcancel').addEventListener('click', closeSheet);
     document.getElementById('newform').addEventListener('submit', function(e){
       e.preventDefault();
+      if (cfg.protect && !cfg.unlocked) return;
       var name = document.getElementById('newname').value.trim();
       var err = document.getElementById('newerr');
       if (!name || name.indexOf('/') >= 0 || name.indexOf(String.fromCharCode(92)) >= 0 || name === '.' || name === '..') {
@@ -962,6 +1035,7 @@ body:not(.show-hidden) .dot{display:none}
 }
 .sheet input[type=text]:focus,.sheet input[type=password]:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
 .err{color:var(--syn-var); font-size:13px; min-height:1.2em}
+.err:empty{display:none}
 .sheet .ico.danger,.sheet .opt.danger .ico{background:var(--red-soft); color:var(--red)}
 .opt.danger:hover{border-color:var(--red)}
 .opt.danger:hover .go{color:var(--red)}
@@ -1136,6 +1210,8 @@ CSS += """
 
 /* ---------- Verrouillage de l'accès ---------- */
 .ibtn.unlocked{color:var(--green); border-color:var(--green)}
+.pill.locked,.chip.locked{opacity:.6; cursor:not-allowed}
+.pill.locked:hover{border-color:var(--border); color:var(--text)}
 .lkveil{position:fixed; inset:0; z-index:90; display:grid; place-items:center; padding:16px; background:rgba(8,10,16,.55)}
 .lkbox{width:min(100%,380px); display:flex; flex-direction:column; gap:12px; padding:22px; border-radius:20px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow-hover)}
 .lkbox h2{margin:0; font-size:18px}
@@ -1167,7 +1243,7 @@ LOCK_JS = r"""
     var veil = document.createElement('div');
     veil.className = 'lkveil';
     veil.innerHTML = '<form class="lkbox" autocomplete="off"><h2>Déverrouiller l’accès</h2>' +
-      '<p>Le mot de passe n’est demandé qu’ici. Ensuite, la suppression, l’envoi de fichiers et le tableau de bord ne le redemandent plus, jusqu’au prochain verrouillage.</p>' +
+      '<p>Le mot de passe n’est demandé qu’ici. Ensuite, la modification, le renommage, la suppression, l’envoi de fichiers et le tableau de bord ne le redemandent plus, jusqu’au prochain verrouillage.</p>' +
       '<input type="password" placeholder="Mot de passe" autocomplete="current-password" required>' +
       '<p class="lkerr" role="alert"></p><div class="row"><button type="button" class="pill" data-x>Annuler</button>' +
       '<button type="submit" class="pill primary">Déverrouiller</button></div></form>';
@@ -1195,15 +1271,46 @@ LOCK_JS = r"""
     var t = e.target.closest ? e.target.closest('[data-unlock]') : null;
     if (t) { e.preventDefault(); dialog(); }
   });
-  fetch('/lock-state', {credentials: 'same-origin'}).then(function(r){ return r.json(); })
-    .then(function(x){ st = x; paint(); }).catch(function(){});
+  var first = null;
+  function refresh(){
+    fetch('/lock-state', {credentials: 'same-origin'}).then(function(r){ return r.json(); }).then(function(x){
+      st = x; paint();
+      if (window.FLCFG) window.FLCFG.unlocked = !!x.files;
+      if (first === null) first = x;
+      else if (window.LKRELOAD && !!x[window.LKRELOAD] !== !!first[window.LKRELOAD]) location.reload();
+    }).catch(function(){});
+  }
+  refresh();
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) refresh(); });
+  window.addEventListener('focus', refresh);
 })();
 """
 
 
-def lock_script():
+def lock_script(reload=None):
+    """Bouton cadenas + dialogue de déverrouillage ; `reload` : partie ("files"/"dash") dont le changement recharge la page."""
     ico = {n: icon(n, 20) for n in ("lock", "unlock")}
-    return f"<script>window.LKICO = {js_json(ico)}; {LOCK_JS}</script>"
+    return f"<script>window.LKICO = {js_json(ico)}; window.LKRELOAD = {js_json(reload)}; {LOCK_JS}</script>"
+
+
+EDIT_LOCKED_HINT = "Accès verrouillé : déverrouille l'accès (cadenas de la liste des fichiers) pour modifier ce fichier."
+
+
+def edit_pill(q, locked):
+    """Bouton « Éditer » : lien normal, ou simple indication « verrouillé » (aucune invite de mot de passe)."""
+    if locked:
+        return (f"<span class='pill locked' role='button' aria-disabled='true' "
+                f"title='{escape(EDIT_LOCKED_HINT, quote=True)}'>{icon('lock', 16)}Éditer · verrouillé</span>")
+    return f"<a class='pill primary' href='/edit?f={q}'>{icon('edit', 16)}Éditer</a>"
+
+
+def locked_page(what, scope, back=None, title="Accès verrouillé — Ma bibliothèque", css="", lock=False):
+    """Page « accès verrouillé » commune : aucun champ de mot de passe, seulement un bouton pour déverrouiller."""
+    actions = (f"<a class='pill' href='{back}'>{icon('back', 16)}Retour</a>" if back else "")
+    actions += f"<button class='pill primary' type='button' data-unlock>{icon('unlock', 16)}Déverrouiller</button>"
+    return (doc_open(title, "", css) + topbar(False, lock)
+            + f"<main><div class='msgcard'><h1>Accès verrouillé</h1><p>{escape(what)} demande de déverrouiller l'accès.</p>{actions}</div></main>"
+            + f"<script>{THEME_JS}</script>{lock_script(scope)}</body></html>")
 
 
 def natural_key(p):
@@ -1797,7 +1904,7 @@ def classify(path, q):
     if path.startswith("/s/"):
         parts = path.split("/", 3)    # le jeton (parts[2]) n'est jamais conservé
         return "web", unquote(parts[3]) if len(parts) > 3 else ""
-    if path in ("/save", "/delete"):
+    if path in ("/save", "/delete", "/rename"):
         return "edit", arg("f")
     if path == "/upload":
         return "edit", (arg("d") + "/" + arg("n")).strip("/")
@@ -3587,13 +3694,7 @@ DASH_JS = """
 def dashboard_page(unlocked):
     parts = [doc_open("Tableau de bord — Ma bibliothèque", "", DASH_CSS), topbar(False, True)]
     if not unlocked:
-        parts.append(
-            "<main><div class='msgcard dash-login'>"
-            f"<div class='ico code'>{icon('lock', 24)}</div>"
-            "<h1>Accès verrouillé</h1><p>Le tableau de bord est verrouillé. Déverrouille l'accès pour le consulter.</p>"
-            "<button class='pill primary' type='button' data-unlock style='margin-top:16px'>Déverrouiller</button></div></main>"
-            f"<script>{THEME_JS}</script>{lock_script()}</body></html>")
-        return "".join(parts)
+        return locked_page("Le tableau de bord", "dash", None, "Tableau de bord — Ma bibliothèque", DASH_CSS, True)
     cfg = {"monitor": icon("monitor", 22), "ban": icon("ban", 22),
            "cats": [{"id": i, "label": label, "color": color} for i, label, color in ACTIVITY_CATS]}
     parts.append(
@@ -3627,7 +3728,7 @@ def dashboard_page(unlocked):
         "<div class='hcard'><h3>Fichiers les plus consultés</h3><div id='h-top'></div></div></div>"
         "<div class='hcard'><h3>Historique des actions</h3><div class='h-list' id='h-list'></div></div></div>"
         "</section></main>"
-        f"<script>window.DCFG = {js_json(cfg)}; {THEME_JS}{DASH_JS}</script>{lock_script()}</body></html>")
+        f"<script>window.DCFG = {js_json(cfg)}; {THEME_JS}{DASH_JS}</script>{lock_script('dash')}</body></html>")
     return "".join(parts)
 
 
@@ -4248,6 +4349,10 @@ class FileHandler(BaseHTTPRequestHandler):
             "(il se termine par ?token=…).")
         self.send_html(html, 401)
 
+    def files_locked(self):
+        """Vrai si un mot de passe est configuré et que cette session n'est pas déverrouillée."""
+        return bool(PASSWORD) and "files" not in unlock_scopes(self.dash_session_id())
+
     def dash_session_id(self):
         c = SimpleCookie()
         try:
@@ -4331,7 +4436,7 @@ class FileHandler(BaseHTTPRequestHandler):
         req = urlsplit(self.path)
         q = parse_qs(req.query)
         try:
-            if req.path not in ("/save", "/delete", "/upload-auth", "/upload", "/unlock", "/lock") + DASH_POSTS:
+            if req.path not in ("/save", "/delete", "/rename", "/upload-auth", "/upload", "/unlock", "/lock") + DASH_POSTS:
                 self.send_error(404)
                 return
             if not self.has_cookie() or self.headers.get("X-Requested-With") != "biblio":
@@ -4345,6 +4450,8 @@ class FileHandler(BaseHTTPRequestHandler):
                 self.route_lock()
             elif req.path == "/delete":
                 self.route_delete(q)
+            elif req.path == "/rename":
+                self.route_rename(q)
             elif req.path == "/upload-auth":
                 self.route_upload_auth()
             elif req.path == "/upload":
@@ -4460,10 +4567,32 @@ class FileHandler(BaseHTTPRequestHandler):
             f"{icon('plus', 22)}</div><div class='text'><div class='name'>Nouveau fichier</div>"
             "<div class='sub'>Il sera créé à l'enregistrement</div></div>"
             f"<button class='ibtn' data-close type='button' aria-label='Fermer'>{icon('close', 18)}</button></div>"
-            "<form id='newform'><input id='newname' type='text' placeholder='nom.py, notes.txt, index.html…' "
+            "<form id='newform'><p id='new-locked' class='sub' role='status' hidden>Accès verrouillé : déverrouille l'accès "
+            "(cadenas en haut de la page) pour créer un fichier.</p>"
+            "<input id='newname' type='text' placeholder='nom.py, notes.txt, index.html…' "
             "autocomplete='off' autocapitalize='off' spellcheck='false'>"
             "<div id='newerr' class='err'></div>"
-            f"<button class='pill primary' type='submit' style='justify-content:center'>{icon('edit', 16)}Créer et éditer</button>"
+            f"<button id='newok' class='pill primary' type='submit' style='justify-content:center'>{icon('edit', 16)}Créer et éditer</button>"
+            "<button id='newcancel' class='pill' type='button' style='justify-content:center'>Annuler</button>"
+            "</form></div>"
+            "<div id='edtdlg' hidden><div class='sheet-head'><div class='ico back'>"
+            f"{icon('edit', 22)}</div><div class='text'><div class='name'>Éditer ce fichier</div>"
+            "<div class='sub' id='edt-name'></div></div>"
+            f"<button class='ibtn' data-close type='button' aria-label='Fermer'>{icon('close', 18)}</button></div>"
+            "<form id='edtform'><p id='edt-locked' class='sub' role='status'>Accès verrouillé : déverrouille l'accès "
+            "(cadenas en haut de la page) pour modifier ce fichier.</p>"
+            "<button id='edtcancel' class='pill' type='button' style='justify-content:center'>Fermer</button>"
+            "</form></div>"
+            "<div id='rendlg' hidden><div class='sheet-head'><div class='ico back'>"
+            f"{icon('rename', 22)}</div><div class='text'><div class='name'>Renommer ce fichier</div>"
+            "<div class='sub' id='ren-name'></div></div>"
+            f"<button class='ibtn' data-close type='button' aria-label='Fermer'>{icon('close', 18)}</button></div>"
+            "<form id='renform'><p id='ren-locked' class='sub' role='status' hidden>Accès verrouillé : déverrouille l'accès "
+            "(cadenas en haut de la page) pour renommer ce fichier.</p>"
+            "<input id='rennew' type='text' autocomplete='off' autocapitalize='off' spellcheck='false' placeholder='Nouveau nom'>"
+            "<div id='renerr' class='err'></div>"
+            f"<button id='renok' class='pill primary' type='submit' style='justify-content:center'>{icon('check', 16)}Renommer</button>"
+            "<button id='rencancel' class='pill' type='button' style='justify-content:center'>Annuler</button>"
             "</form></div>"
             "<div id='deldlg' hidden><div class='sheet-head'><div class='ico back danger'>"
             f"{icon('trash', 22)}</div><div class='text'><div class='name'>Supprimer ce fichier ?</div>"
@@ -4479,7 +4608,8 @@ class FileHandler(BaseHTTPRequestHandler):
             f"{icon('upload', 22)}</div><div class='text'><div class='name'>Envoyer dans ce dossier</div>"
             "<div class='sub' id='up-dest'></div></div>"
             f"<button class='ibtn' data-close type='button' aria-label='Fermer'>{icon('close', 18)}</button></div>"
-            "<div id='upform' hidden><p id='uperr' class='sub' role='status'></p></div>"
+            "<div id='upform' hidden style='display:flex;flex-direction:column;gap:10px'><p id='uperr' class='sub' role='status'></p>"
+            "<button id='upcancel' class='pill' type='button' style='justify-content:center'>Annuler</button></div>"
             "<div id='uppick' hidden>"
             "<label class='switch'><input type='checkbox' id='upover'><span class='track'></span>Remplacer les fichiers existants</label>"
             f"<a class='opt' href='#' id='up-pick-files'><span class='ico back'>{icon('file', 22)}</span>"
@@ -4496,7 +4626,7 @@ class FileHandler(BaseHTTPRequestHandler):
             "</div></div></div>")
 
         cfg = {"readonly": READONLY, "canDelete": bool(PASSWORD) and not READONLY,
-               "unlocked": "files" in unlock_scopes(self.dash_session_id()), "maxUpload": MAX_UPLOAD, "folder": relative.as_posix() if relative.parts else ""}
+               "unlocked": "files" in unlock_scopes(self.dash_session_id()), "protect": bool(PASSWORD), "maxUpload": MAX_UPLOAD, "folder": relative.as_posix() if relative.parts else ""}
         icons_js = {n: icon(n, 22) for n in ICONS}
         parts.append(f"<script>window.FLCFG = {js_json(cfg)}; window.ICO = {js_json(icons_js)};"
                      f"{THEME_JS}{DECORATE_JS}{BROWSE_JS}</script>{lock_script()}</body></html>")
@@ -4511,6 +4641,9 @@ class FileHandler(BaseHTTPRequestHandler):
         if edit and READONLY:
             self.send_html(message_page("Mode lecture seule",
                                         "Le serveur a été lancé avec l'option lecture seule : l'édition est désactivée."), 403)
+            return
+        if edit and PASSWORD and "files" not in unlock_scopes(self.dash_session_id()):
+            self.send_html(locked_page(f"Modifier « {p.name} »", "files", folder_url(p.parent)), 403)
             return
 
         is_new = False
@@ -4569,7 +4702,7 @@ class FileHandler(BaseHTTPRequestHandler):
             elif p.suffix.lower() in MD_EXT:
                 tools.append(f"<a class='pill' href='/preview?f={q}'>{icon('book', 16)}Aperçu</a>")
             if not READONLY:
-                tools.append(f"<a class='pill primary' href='/edit?f={q}'>{icon('edit', 16)}Éditer</a>")
+                tools.append(edit_pill(q, self.files_locked()))
         else:
             tools.append(f"<a class='pill' href='/view?f={q}'>{icon('eye', 16)}Lire</a>")
             if p.suffix.lower() in MD_EXT:
@@ -4639,7 +4772,7 @@ class FileHandler(BaseHTTPRequestHandler):
             f"<a class='pill' href='/view?f={q}'>{icon('eye', 16)}Source</a>",
         ]
         if not READONLY:
-            tools.append(f"<a class='pill primary' href='/edit?f={q}'>{icon('edit', 16)}Éditer</a>")
+            tools.append(edit_pill(q, self.files_locked()))
         html = (
             doc_open(f"Aperçu · {p.name} — Ma bibliothèque", "ed-page")
             + "<header class='edbar'>"
@@ -4686,7 +4819,7 @@ class FileHandler(BaseHTTPRequestHandler):
             f"<a class='pill' href='/view?f={q}'>{icon('code', 16)}Source</a>",
         ]
         if not READONLY:
-            tools.append(f"<a class='pill primary' href='/edit?f={q}'>{icon('edit', 16)}Éditer</a>")
+            tools.append(edit_pill(q, self.files_locked()))
         html = (
             doc_open(f"{p.name} — Ma bibliothèque", "ed-page md-page", MD_CSS)
             + "<header class='edbar'>"
@@ -4787,8 +4920,13 @@ class FileHandler(BaseHTTPRequestHandler):
             tracks += (f"<track kind='subtitles' src='/sub?f={fq}' srclang='{lang}' "
                        f"label='{escape(label, quote=True)}'>")
             if not READONLY:
-                sub_chips += (f"<a class='chip' href='/edit?f={fq}' title='Éditer les sous-titres'>"
-                              f"{icon('edit', 16)}{escape(label)}</a>")
+                if self.files_locked():
+                    sub_chips += (f"<span class='chip locked' aria-disabled='true' "
+                                  f"title='{escape(EDIT_LOCKED_HINT, quote=True)}'>"
+                                  f"{icon('lock', 16)}{escape(label)}</span>")
+                else:
+                    sub_chips += (f"<a class='chip' href='/edit?f={fq}' title='Éditer les sous-titres'>"
+                                  f"{icon('edit', 16)}{escape(label)}</a>")
 
         def nav_btn(target, kind, text):
             if target is None:
@@ -4984,6 +5122,9 @@ class FileHandler(BaseHTTPRequestHandler):
         if READONLY:
             self.send_json({"ok": False, "error": "Mode lecture seule"}, 403)
             return
+        if PASSWORD and "files" not in unlock_scopes(self.dash_session_id()):
+            self.send_json({"ok": False, "error": "Accès verrouillé", "locked": True}, 403)
+            return
         p = resolve_inside(arg("f"))
         if p is None or not p.name:
             self.send_json({"ok": False, "error": "Chemin non autorisé"}, 403)
@@ -5171,6 +5312,52 @@ class FileHandler(BaseHTTPRequestHandler):
     def upload_error(self, length, msg, status, code=""):
         self.drain(length)
         self.send_json({"ok": False, "error": msg, "code": code}, status)
+
+    def route_rename(self, q):
+        """POST /rename?f=<chemin>&to=<nouveau nom> ; l'accès doit être déverrouillé (comme la suppression)."""
+        if READONLY:
+            self.send_json({"ok": False, "error": "Mode lecture seule"}, 403)
+            return
+        if not PASSWORD:
+            self.send_json({"ok": False, "error": "Renommage désactivé : BIBLIO_PASSWORD absent du .env"}, 403)
+            return
+        if "files" not in unlock_scopes(self.dash_session_id()):
+            self.send_json({"ok": False, "error": "Accès verrouillé", "locked": True}, 403)
+            return
+        p = resolve_inside(q.get("f", [""])[0])
+        if p is None or p == ROOT:
+            self.send_json({"ok": False, "error": "Chemin non autorisé"}, 403)
+            return
+        if not os.path.lexists(p):
+            self.send_json({"ok": False, "error": "Fichier introuvable"}, 404)
+            return
+        if p.is_dir():
+            self.send_json({"ok": False, "error": "Les dossiers ne peuvent pas être renommés"}, 400)
+            return
+        new = q.get("to", [""])[0].strip()
+        if (not new or new in (".", "..") or "/" in new or "\\" in new or "\x00" in new
+                or len(new.encode("utf-8")) > 255):
+            self.send_json({"ok": False, "error": "Nom invalide"}, 400)
+            return
+        target = p.with_name(new)
+        if ENV_PATH is not None and os.path.normcase(str(target)) == os.path.normcase(str(ENV_PATH)):
+            self.send_json({"ok": False, "error": "Nom réservé"}, 403)
+            return
+        if new != p.name and os.path.lexists(target):
+            try:
+                same = new.lower() == p.name.lower() and target.samefile(p)
+            except OSError:
+                same = False
+            if not same:
+                self.send_json({"ok": False, "error": "Un fichier porte déjà ce nom"}, 409)
+                return
+        try:
+            if new != p.name:
+                os.rename(p, target)
+        except OSError as e:
+            self.send_json({"ok": False, "error": e.strerror or "Renommage impossible"}, 500)
+            return
+        self.send_json({"ok": True, "name": new})
 
     def route_upload_auth(self):
         """POST /upload-auth ; l'accès doit être déverrouillé -> jeton d'envoi."""
