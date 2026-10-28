@@ -8,6 +8,7 @@
       wrap.hidden = false;
       var inp = document.getElementById('newname'), nlock = !!cfg.protect && !cfg.unlocked;
       document.getElementById('rendlg').hidden = true; document.getElementById('edtdlg').hidden = true;
+      document.getElementById('mkdlg').hidden = true;
       document.getElementById('new-locked').hidden = !nlock;
       inp.hidden = nlock; document.getElementById('newok').hidden = nlock;
       inp.value = ''; document.getElementById('newerr').textContent = '';

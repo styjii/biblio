@@ -14,7 +14,7 @@ from app.routes.serve import ServeRoutes
 from app.routes.upload import UploadRoutes
 from app.routes.viewer import ViewerRoutes
 
-POSTS = ("/save", "/delete", "/rename", "/upload-auth", "/upload", "/unlock", "/lock")
+POSTS = ("/save", "/delete", "/rename", "/mkdir", "/upload-auth", "/upload", "/unlock", "/lock")
 DASH_POSTS = ("/dashboard/block", "/dashboard/unblock")
 
 
@@ -76,6 +76,8 @@ class FileHandler(BaseHandler, BrowseRoutes, ViewerRoutes, PlayerRoutes, ServeRo
                 self.serve_sub(arg("f"))
             elif path == "/pdf":
                 self.route_pdf(arg("f"))
+            elif path == "/zip":
+                self.route_zip(arg("f"))
             elif path == "/dashboard":
                 self.page_dashboard()
             elif path == "/dashboard/data":
@@ -111,6 +113,8 @@ class FileHandler(BaseHandler, BrowseRoutes, ViewerRoutes, PlayerRoutes, ServeRo
                 self.route_delete(q)
             elif req.path == "/rename":
                 self.route_rename(q)
+            elif req.path == "/mkdir":
+                self.route_mkdir(q)
             elif req.path == "/upload-auth":
                 self.route_upload_auth()
             elif req.path == "/upload":

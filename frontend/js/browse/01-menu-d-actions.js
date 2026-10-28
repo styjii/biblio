@@ -10,13 +10,15 @@
     listen:   {ic:'music',    t:'Écouter',            d:'Lecteur audio (aléatoire, répétition…)', u:function(f){return '/listen?f='+f;}},
     open:     {ic:'external', t:'Ouvrir',             d:'Afficher dans le navigateur',          u:function(f){return '/raw?f='+f;}},
     download: {ic:'download', t:'Télécharger',        d:'Enregistrer une copie',                u:function(f){return '/raw?dl=1&f='+f;}},
+    openf:    {ic:'folder',   t:'Ouvrir',             d:'Afficher le contenu du dossier',       u:function(f){return '/?folder='+f;}},
+    zip:      {ic:'download', t:'Télécharger en ZIP', d:'Archive du dossier et de son contenu', u:function(f){return '/zip?f='+f;}},
     rename:   {ic:'rename',   t:'Renommer',           d:'Changer le nom du fichier',            u:null, prot:true},
     del:      {ic:'trash',    t:'Supprimer',          d:'Supprimer définitivement',             u:null, danger:true, prot:true}
   };
   var BY = {
     video:['watch','open','download'], pdf:['pdf','open','download'], text:['view','edit','download'],
     web:['preview','view','edit','download'], image:['open','download'], audio:['listen','open','download'],
-    binary:['download'], md:['mdview','mdsrc','edit','download']
+    binary:['download'], folder:['openf','zip'], md:['mdview','mdsrc','edit','download']
   };
   var wrap = document.getElementById('sheet');
   var bodyEl = document.getElementById('sh-body');
@@ -30,6 +32,7 @@
     if (upShown) { upMin = false; document.getElementById('up-tab').hidden = true; }
     wrap.hidden = true; document.getElementById('newdlg').hidden = true; document.getElementById('deldlg').hidden = true;
     document.getElementById('rendlg').hidden = true; document.getElementById('edtdlg').hidden = true;
+    document.getElementById('mkdlg').hidden = true;
     document.getElementById('updlg').hidden = true; bodyEl.innerHTML = '';
     if (reload) location.reload();
   }
@@ -72,6 +75,7 @@
     });
     document.getElementById('rendlg').hidden = true;
     document.getElementById('newdlg').hidden = true;
+    document.getElementById('mkdlg').hidden = true;
     document.getElementById('deldlg').hidden = true;
     document.getElementById('edtdlg').hidden = true;
     document.getElementById('sheet-main').hidden = false;

@@ -31,6 +31,23 @@
         <button id='newcancel' class='pill' type='button' style='justify-content:center'>Annuler</button>
       </form>
     </div>
+    <div id='mkdlg' hidden>
+      <div class='sheet-head'>
+        <div class='ico folder'>{{ icon folder 22 }}</div>
+        <div class='text'>
+          <div class='name'>Créer un dossier</div>
+          <div class='sub' id='mk-dest'></div>
+        </div>
+        <button class='ibtn' data-close type='button' aria-label='Fermer'>{{ icon close 18 }}</button>
+      </div>
+      <form id='mkform'>
+        <p id='mk-locked' class='sub' role='status' hidden>Accès verrouillé : déverrouille l'accès (cadenas en haut de la page) pour créer un dossier.</p>
+        <input id='mkname' type='text' placeholder='Nom du dossier' autocomplete='off' autocapitalize='off' spellcheck='false'>
+        <div id='mkerr' class='err'></div>
+        <button id='mkok' class='pill primary' type='submit' style='justify-content:center'>{{ icon folder 16 }}Créer le dossier</button>
+        <button id='mkcancel' class='pill' type='button' style='justify-content:center'>Annuler</button>
+      </form>
+    </div>
     <div id='edtdlg' hidden>
       <div class='sheet-head'>
         <div class='ico back'>{{ icon edit 22 }}</div>
@@ -49,7 +66,7 @@
       <div class='sheet-head'>
         <div class='ico back'>{{ icon rename 22 }}</div>
         <div class='text'>
-          <div class='name'>Renommer ce fichier</div>
+          <div class='name' id='ren-title'>Renommer ce fichier</div>
           <div class='sub' id='ren-name'></div>
         </div>
         <button class='ibtn' data-close type='button' aria-label='Fermer'>{{ icon close 18 }}</button>
@@ -66,13 +83,14 @@
       <div class='sheet-head'>
         <div class='ico back danger'>{{ icon trash 22 }}</div>
         <div class='text'>
-          <div class='name'>Supprimer ce fichier ?</div>
+          <div class='name' id='del-title'>Supprimer ce fichier ?</div>
           <div class='sub' id='del-name'></div>
         </div>
         <button class='ibtn' data-close type='button' aria-label='Fermer'>{{ icon close 18 }}</button>
       </div>
       <form id='delform'>
         <p id='del-locked' class='sub' role='status' hidden>Accès verrouillé : déverrouille l'accès (cadenas en haut de la page) pour supprimer ce fichier.</p>
+        <p id='del-warn' class='sub' role='status' hidden>Le dossier et tout ce qu'il contient seront supprimés définitivement.</p>
         <div id='delerr' class='err'></div>
         <button id='delok' class='pill danger' type='submit' style='justify-content:center'>{{ icon trash 16 }}Supprimer définitivement</button>
         <button id='delcancel' class='pill' type='button' style='justify-content:center'>Annuler</button>

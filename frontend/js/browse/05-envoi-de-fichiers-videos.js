@@ -24,7 +24,7 @@
     };
     var upRestore = function(){
       upMin = false; upTab.hidden = true;
-      ['sheet-main', 'newdlg', 'deldlg', 'rendlg', 'edtdlg'].forEach(function(id){ upEl(id).hidden = true; });
+      ['sheet-main', 'newdlg', 'mkdlg', 'deldlg', 'rendlg', 'edtdlg'].forEach(function(id){ upEl(id).hidden = true; });
       upEl('updlg').hidden = false; wrap.hidden = false;
     };
     upEl('up-min').addEventListener('click', upMinimize);
@@ -49,7 +49,7 @@
 
     upBtn.addEventListener('click', function(){
       if (upMin) { upRestore(); return; }
-      upEl('sheet-main').hidden = true; upEl('newdlg').hidden = true; upEl('deldlg').hidden = true; upEl('rendlg').hidden = true; upEl('edtdlg').hidden = true;
+      upEl('sheet-main').hidden = true; upEl('newdlg').hidden = true; upEl('deldlg').hidden = true; upEl('rendlg').hidden = true; upEl('edtdlg').hidden = true; upEl('mkdlg').hidden = true;
       upEl('updlg').hidden = false; wrap.hidden = false;
       upEl('up-dest').textContent = '/' + (cfg.folder || '');
       if (!cfg.unlocked) { upLocked(); return; }

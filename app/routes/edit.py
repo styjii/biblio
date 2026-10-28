@@ -1,6 +1,7 @@
 """Écriture : enregistrement, suppression et renommage (accès déverrouillé requis)."""
 
 import os
+import shutil
 import stat
 from pathlib import Path
 
@@ -9,6 +10,24 @@ from app.config import MAX_SAVE
 from app.filesystem import is_binary_file, resolve_inside
 from app.security import unlock_scopes
 from app.utils import fmt_size
+
+
+def valid_name(new):
+    """Nom de fichier ou de dossier simple (sans chemin) et de longueur raisonnable."""
+    return not (not new or new in (".", "..") or "/" in new or "\\" in new or "\x00" in new
+                or len(new.encode("utf-8")) > 255)
+
+
+def holds_protected(folder):
+    """Vrai si le dossier contient le .env ou le programme biblio lui-même (à ne jamais supprimer ni déplacer)."""
+    try:
+        f = os.path.realpath(folder)
+        for target in (config.ENV_PATH, config.HERE):
+            if target is not None and os.path.commonpath([f, os.path.realpath(target)]) == f:
+                return True
+    except (ValueError, OSError):
+        return True
+    return False
 
 
 class EditRoutes:
@@ -104,11 +123,14 @@ class EditRoutes:
         if not os.path.lexists(p):
             self.send_json({"ok": False, "error": "Fichier introuvable"}, 404)
             return
-        if p.is_dir():                  # dossier réel ou raccourci vers un dossier
-            self.send_json({"ok": False, "error": "Les dossiers ne peuvent pas être supprimés"}, 400)
-            return
         try:
-            os.unlink(p)                # sur un lien symbolique, supprime le lien et non sa cible
+            if p.is_dir() and not p.is_symlink():      # vrai dossier : supprimé avec tout son contenu
+                if holds_protected(p):
+                    self.send_json({"ok": False, "error": "Ce dossier contient le serveur ou son fichier .env"}, 403)
+                    return
+                shutil.rmtree(p)        # ne suit pas les liens symboliques contenus dans le dossier
+            else:
+                os.unlink(p)            # fichier, ou raccourci : supprime le lien et non sa cible
         except OSError as e:
             self.send_json({"ok": False, "error": e.strerror or "Suppression impossible"}, 500)
             return
@@ -132,12 +154,11 @@ class EditRoutes:
         if not os.path.lexists(p):
             self.send_json({"ok": False, "error": "Fichier introuvable"}, 404)
             return
-        if p.is_dir():
-            self.send_json({"ok": False, "error": "Les dossiers ne peuvent pas être renommés"}, 400)
+        if p.is_dir() and not p.is_symlink() and holds_protected(p):
+            self.send_json({"ok": False, "error": "Ce dossier contient le serveur ou son fichier .env"}, 403)
             return
         new = q.get("to", [""])[0].strip()
-        if (not new or new in (".", "..") or "/" in new or "\\" in new or "\x00" in new
-                or len(new.encode("utf-8")) > 255):
+        if not valid_name(new):
             self.send_json({"ok": False, "error": "Nom invalide"}, 400)
             return
         target = p.with_name(new)
@@ -159,3 +180,33 @@ class EditRoutes:
             self.send_json({"ok": False, "error": e.strerror or "Renommage impossible"}, 500)
             return
         self.send_json({"ok": True, "name": new})
+
+    def route_mkdir(self, q):
+        """POST /mkdir?d=<dossier parent>&to=<nom> ; mêmes droits que la création d'un fichier (cadenas si un mot de passe existe)."""
+        if config.READONLY:
+            self.send_json({"ok": False, "error": "Mode lecture seule"}, 403)
+            return
+        if config.PASSWORD and "files" not in unlock_scopes(self.dash_session_id()):
+            self.send_json({"ok": False, "error": "Accès verrouillé", "locked": True}, 403)
+            return
+        parent = resolve_inside(q.get("d", [""])[0])
+        if parent is None:
+            self.send_json({"ok": False, "error": "Chemin non autorisé"}, 403)
+            return
+        if not parent.is_dir():
+            self.send_json({"ok": False, "error": "Dossier parent introuvable"}, 404)
+            return
+        name = q.get("to", [""])[0].strip()
+        if not valid_name(name):
+            self.send_json({"ok": False, "error": "Nom invalide"}, 400)
+            return
+        target = parent / name
+        if os.path.lexists(target):
+            self.send_json({"ok": False, "error": "Un fichier ou un dossier porte déjà ce nom"}, 409)
+            return
+        try:
+            os.mkdir(target)
+        except OSError as e:
+            self.send_json({"ok": False, "error": e.strerror or "Création impossible"}, 500)
+            return
+        self.send_json({"ok": True, "name": name})

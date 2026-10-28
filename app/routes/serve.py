@@ -1,12 +1,38 @@
 """Service de fichiers : contenu brut, sites, bundle de l'éditeur, PDF et pdf.js."""
 
 import hmac
+import os
+import zipfile
+from pathlib import Path
 from urllib.parse import quote, unquote
 
 from app import config
 from app.assets import bundle_bytes
 from app.config import BUNDLE
-from app.filesystem import guess_mime, kind_of, rel_of, resolve_inside
+from app.devices import add_bytes
+from app.filesystem import guess_mime, is_env_file, kind_of, rel_of, resolve_inside
+from app.filetypes import AUDIO_EXT, IMAGE_EXT, VIDEO_EXT
+
+# Formats déjà compressés : stockés tels quels dans l'archive (gain de temps, pas de gain de taille à espérer).
+STORED_EXT = VIDEO_EXT | AUDIO_EXT | IMAGE_EXT | {
+    ".zip", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".rar", ".pdf", ".docx", ".xlsx", ".pptx", ".odt", ".ods",
+    ".jar", ".apk", ".woff", ".woff2",
+}
+
+
+class _ZipSink:
+    """Destination non « seekable » du ZIP : écrit sur la socket et compte les octets envoyés."""
+
+    def __init__(self, wfile, entry):
+        self.wfile, self.entry = wfile, entry
+
+    def write(self, data):
+        self.wfile.write(data)
+        add_bytes(self.entry, len(data))
+        return len(data)
+
+    def flush(self):
+        self.wfile.flush()
 
 
 class ServeRoutes:
@@ -26,6 +52,48 @@ class ServeRoutes:
                 ctype = "text/plain; charset=utf-8"
         extra = {"Content-Security-Policy": "sandbox"} if kind in ("text", "web") else None
         self.send_file(p, ctype, disp, extra)
+
+    def route_zip(self, rel):
+        """GET /zip?f=<dossier> : archive ZIP du dossier et de son contenu, construite au fil de l'envoi."""
+        p = resolve_inside(rel)
+        if p is None or not p.is_dir():
+            self.send_error(404, "Dossier introuvable")
+            return
+        top = p.name or config.ROOT.name or "bibliotheque"
+        fname = top + ".zip"
+        ascii_name = "".join(c if c.isascii() and c.isprintable() and c not in '"\\;' else "_" for c in fname)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/zip")
+        self.send_header("Content-Disposition",
+                         f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(fname)}')
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")        # longueur inconnue : la fin de l'archive = fermeture
+        self.end_headers()
+        self.close_connection = True
+        with zipfile.ZipFile(_ZipSink(self.wfile, self._entry), "w", zipfile.ZIP_DEFLATED,
+                             allowZip64=True, strict_timestamps=False) as zf:
+            for dirpath, dirnames, filenames in os.walk(p):     # les raccourcis vers des dossiers ne sont pas suivis
+                dirnames.sort(key=str.casefold)
+                here = Path(dirpath)
+                arc_dir = Path(top, *here.relative_to(p).parts).as_posix()
+                if not dirnames and not filenames:
+                    info = zipfile.ZipInfo(arc_dir + "/")
+                    info.external_attr = (0o40755 << 16) | 0x10
+                    zf.writestr(info, b"")
+                for name in sorted(filenames, key=str.casefold):
+                    fp = here / name
+                    if is_env_file(fp) or (name.startswith(".") and name.endswith(".fl-tmp")) or not fp.is_file():
+                        continue
+                    try:
+                        with open(fp, "rb"):
+                            pass                       # illisible : ignoré avant d'écrire l'en-tête de l'entrée
+                        zf.write(fp, arc_dir + "/" + name, zipfile.ZIP_STORED if fp.suffix.lower() in STORED_EXT
+                                 else zipfile.ZIP_DEFLATED)
+                    except (BrokenPipeError, ConnectionResetError):
+                        raise
+                    except (OSError, UnicodeError, ValueError):
+                        continue
 
     def route_site(self, path):
         """Aperçu des pages web : /s/<token>/<chemin> (isolé par CSP sandbox)."""

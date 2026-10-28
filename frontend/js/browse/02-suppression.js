@@ -7,6 +7,10 @@
   }
   function askDelete(a){
     delTarget = a;
+    var fo = a.dataset.kind === 'folder';
+    document.getElementById('del-title').textContent = fo ? 'Supprimer ce dossier ?' : 'Supprimer ce fichier ?';
+    document.getElementById('del-warn').hidden = !fo;
+    document.getElementById('del-locked').textContent = 'Accès verrouillé : déverrouille l\'accès (cadenas en haut de la page) pour supprimer ' + (fo ? 'ce dossier.' : 'ce fichier.');
     document.getElementById('del-name').textContent = a.dataset.title;
     document.getElementById('delerr').textContent = '';
     delPaint();

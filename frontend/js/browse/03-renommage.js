@@ -8,6 +8,9 @@
   }
   function askRename(a){
     renTarget = a;
+    var fo = a.dataset.kind === 'folder';
+    document.getElementById('ren-title').textContent = fo ? 'Renommer ce dossier' : 'Renommer ce fichier';
+    document.getElementById('ren-locked').textContent = 'Accès verrouillé : déverrouille l\'accès (cadenas en haut de la page) pour renommer ' + (fo ? 'ce dossier.' : 'ce fichier.');
     var inp = document.getElementById('rennew');
     document.getElementById('ren-name').textContent = a.dataset.title;
     document.getElementById('renerr').textContent = '';
@@ -41,6 +44,6 @@
         }
         location.reload();
       })
-      .catch(function(){ btn.disabled = false; err.textContent = 'Échec réseau, le fichier n’a pas été renommé.'; });
+      .catch(function(){ btn.disabled = false; err.textContent = 'Échec réseau, rien n’a été renommé.'; });
   });
 

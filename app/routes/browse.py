@@ -48,6 +48,7 @@ class BrowseRoutes:
 
         parts.append(render("browse/toolbar",
                             new_button="" if config.READONLY else render("browse/new_button"),
+                            mkdir_button="" if config.READONLY else render("browse/mkdir_button"),
                             upload_button=render("browse/upload_button")
                             if config.PASSWORD and not config.READONLY else ""))
 
@@ -64,7 +65,8 @@ class BrowseRoutes:
 
         if folders:
             items = "".join(render("browse/folder_item", dot=" dot" if d.name.startswith(".") else "",
-                                   target=quote(rel_of(d), safe=""),
+                                   target=quote(rel_of(d), safe=""), title=escape(d.name, quote=True),
+                                   more_button=render("components/more_button"),
                                    name_key=escape(d.name.casefold(), quote=True), name=escape(d.name))
                             for d in folders)
             parts.append(render("browse/section", key="folders", label="Dossiers", count=len(folders),

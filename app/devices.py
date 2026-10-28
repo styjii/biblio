@@ -218,8 +218,12 @@ def classify(path, q):
     if path.startswith("/s/"):
         parts = path.split("/", 3)    # le jeton (parts[2]) n'est jamais conservé
         return "web", unquote(parts[3]) if len(parts) > 3 else ""
+    if path == "/zip":
+        return "download", arg("f") or "/"
     if path in ("/save", "/delete", "/rename"):
         return "edit", arg("f")
+    if path == "/mkdir":
+        return "edit", (arg("d") + "/" + arg("to")).strip("/")
     if path == "/upload":
         return "edit", (arg("d") + "/" + arg("n")).strip("/")
     return None
