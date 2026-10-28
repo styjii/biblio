@@ -56,9 +56,9 @@ def file_card(p, kind):
     size = _size_of(p)
     href = {"text": f"/view?f={q}", "web": f"/view?f={q}", "pdf": f"/pdf?f={q}",
             "image": f"/raw?f={q}", "audio": f"/listen?f={q}", "binary": f"/raw?dl=1&f={q}"}[kind]
-    direct = kind in ("pdf", "image", "audio", "binary")
+    direct = kind in ("pdf", "image", "audio")
     ext = p.suffix[1:].upper() if p.suffix else "FICHIER"
-    has_menu = kind in ("pdf", "image", "audio")
+    has_menu = kind in ("pdf", "image", "audio", "binary")
     return render("components/file_card",
                   dot=" dot" if p.name.startswith(".") else "",
                   href=href, q=q, kind=kind,
