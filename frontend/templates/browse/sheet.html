@@ -1,0 +1,129 @@
+{# Feuille d'actions (menu d'un fichier) et ses dialogues : nouveau fichier, éditer, renommer, supprimer, envoyer.
+   Les textes « Accès verrouillé » sont affichés tels quels : aucun mot de passe n'est demandé ici. #}
+<div id='sheet' hidden>
+  <div class='backdrop' data-close></div>
+  <div class='sheet' role='dialog' aria-modal='true'>
+    <div id='sheet-main'>
+      <div class='sheet-head'>
+        <div id='sh-ico' class='ico'></div>
+        <div class='text'>
+          <div class='name' id='sh-title'></div>
+          <div class='sub' id='sh-sub'></div>
+        </div>
+        <button class='ibtn' data-close type='button' aria-label='Fermer'>{{ icon close 18 }}</button>
+      </div>
+      <div id='sh-body'></div>
+    </div>
+    <div id='newdlg' hidden>
+      <div class='sheet-head'>
+        <div class='ico back'>{{ icon plus 22 }}</div>
+        <div class='text'>
+          <div class='name'>Nouveau fichier</div>
+          <div class='sub'>Il sera créé à l'enregistrement</div>
+        </div>
+        <button class='ibtn' data-close type='button' aria-label='Fermer'>{{ icon close 18 }}</button>
+      </div>
+      <form id='newform'>
+        <p id='new-locked' class='sub' role='status' hidden>Accès verrouillé : déverrouille l'accès (cadenas en haut de la page) pour créer un fichier.</p>
+        <input id='newname' type='text' placeholder='nom.py, notes.txt, index.html…' autocomplete='off' autocapitalize='off' spellcheck='false'>
+        <div id='newerr' class='err'></div>
+        <button id='newok' class='pill primary' type='submit' style='justify-content:center'>{{ icon edit 16 }}Créer et éditer</button>
+        <button id='newcancel' class='pill' type='button' style='justify-content:center'>Annuler</button>
+      </form>
+    </div>
+    <div id='edtdlg' hidden>
+      <div class='sheet-head'>
+        <div class='ico back'>{{ icon edit 22 }}</div>
+        <div class='text'>
+          <div class='name'>Éditer ce fichier</div>
+          <div class='sub' id='edt-name'></div>
+        </div>
+        <button class='ibtn' data-close type='button' aria-label='Fermer'>{{ icon close 18 }}</button>
+      </div>
+      <form id='edtform'>
+        <p id='edt-locked' class='sub' role='status'>Accès verrouillé : déverrouille l'accès (cadenas en haut de la page) pour modifier ce fichier.</p>
+        <button id='edtcancel' class='pill' type='button' style='justify-content:center'>Fermer</button>
+      </form>
+    </div>
+    <div id='rendlg' hidden>
+      <div class='sheet-head'>
+        <div class='ico back'>{{ icon rename 22 }}</div>
+        <div class='text'>
+          <div class='name'>Renommer ce fichier</div>
+          <div class='sub' id='ren-name'></div>
+        </div>
+        <button class='ibtn' data-close type='button' aria-label='Fermer'>{{ icon close 18 }}</button>
+      </div>
+      <form id='renform'>
+        <p id='ren-locked' class='sub' role='status' hidden>Accès verrouillé : déverrouille l'accès (cadenas en haut de la page) pour renommer ce fichier.</p>
+        <input id='rennew' type='text' autocomplete='off' autocapitalize='off' spellcheck='false' placeholder='Nouveau nom'>
+        <div id='renerr' class='err'></div>
+        <button id='renok' class='pill primary' type='submit' style='justify-content:center'>{{ icon check 16 }}Renommer</button>
+        <button id='rencancel' class='pill' type='button' style='justify-content:center'>Annuler</button>
+      </form>
+    </div>
+    <div id='deldlg' hidden>
+      <div class='sheet-head'>
+        <div class='ico back danger'>{{ icon trash 22 }}</div>
+        <div class='text'>
+          <div class='name'>Supprimer ce fichier ?</div>
+          <div class='sub' id='del-name'></div>
+        </div>
+        <button class='ibtn' data-close type='button' aria-label='Fermer'>{{ icon close 18 }}</button>
+      </div>
+      <form id='delform'>
+        <p id='del-locked' class='sub' role='status' hidden>Accès verrouillé : déverrouille l'accès (cadenas en haut de la page) pour supprimer ce fichier.</p>
+        <div id='delerr' class='err'></div>
+        <button id='delok' class='pill danger' type='submit' style='justify-content:center'>{{ icon trash 16 }}Supprimer définitivement</button>
+        <button id='delcancel' class='pill' type='button' style='justify-content:center'>Annuler</button>
+      </form>
+    </div>
+    <div id='updlg' hidden>
+      <div class='sheet-head'>
+        <div class='ico back'>{{ icon upload 22 }}</div>
+        <div class='text'>
+          <div class='name'>Envoyer dans ce dossier</div>
+          <div class='sub' id='up-dest'></div>
+        </div>
+        <button class='ibtn' data-close type='button' aria-label='Fermer'>{{ icon close 18 }}</button>
+      </div>
+      <div id='upform' hidden style='display:flex;flex-direction:column;gap:10px'>
+        <p id='uperr' class='sub' role='status'></p>
+        <button id='upcancel' class='pill' type='button' style='justify-content:center'>Annuler</button>
+      </div>
+      <div id='uppick' hidden>
+        <label class='switch'>
+          <input type='checkbox' id='upover'>
+          <span class='track'></span>Remplacer les fichiers existants
+        </label>
+        <a class='opt' href='#' id='up-pick-files'>
+          <span class='ico back'>{{ icon file 22 }}</span>
+          <span class='text'>
+            <span class='name'>Fichiers ou vidéos</span>
+            <div class='sub'>Un ou plusieurs fichiers</div>
+          </span>
+          <span class='go'>{{ icon chevron 18 }}</span>
+        </a>
+        <a class='opt' href='#' id='up-pick-dir'>
+          <span class='ico back'>{{ icon folder 22 }}</span>
+          <span class='text'>
+            <span class='name'>Un dossier entier</span>
+            <div class='sub'>Avec ses sous-dossiers</div>
+          </span>
+          <span class='go'>{{ icon chevron 18 }}</span>
+        </a>
+        <input id='up-in-files' type='file' multiple hidden>
+        <input id='up-in-dir' type='file' webkitdirectory hidden>
+      </div>
+      <div id='uprun' hidden>
+        <div class='upbar'>
+          <i id='up-bar'></i>
+        </div>
+        <div class='sub' id='up-sum'></div>
+        <div id='up-list' class='uplist'></div>
+        <button id='up-cancel' class='pill' type='button' style='justify-content:center'>Arrêter l'envoi</button>
+        <button id='up-done' class='pill primary' type='button' style='justify-content:center' hidden>Terminer</button>
+      </div>
+    </div>
+  </div>
+</div>

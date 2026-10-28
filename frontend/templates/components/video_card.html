@@ -1,0 +1,10 @@
+<a class='vcard fcard{{ dot }}' href='/watch?f={{ q }}' data-f='{{ q }}' data-key='{{ key }}' data-kind='video' data-direct='1' data-ico='film' data-icls='media' data-title='{{ title }}' data-size='{{ size }} · {{ ext }}' data-name='{{ name_key }}'>
+<div class='thumb'>
+<span class='ph'>{{ icon film 36 }}</span>
+<img loading='lazy' alt='' src='/thumb?f={{ q }}' onerror='this.remove()'>
+<span class='play'>{{ icon play 22 }}</span>
+<span class='dur' hidden></span><span class='bar' hidden><i></i></span>
+{{ more_button }}
+</div>
+<div class='vinfo'><div class='vname'>{{ name }}</div><div class='vsub'>{{ size }} · {{ ext }}</div></div>
+</a>

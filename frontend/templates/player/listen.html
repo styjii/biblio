@@ -1,0 +1,69 @@
+{# Lecteur audio : la liste des pistes est remplie par frontend/js/listen/ à partir de window.LCFG. #}
+<main class='listen'>
+  <section class='lplayer'>
+    <div class='cover' id='l-cover'>
+      <span class='cover-ico'>{{ icon music 72 }}</span>
+      <img id='l-img' alt='Pochette' hidden>
+    </div>
+    <div class='ltitle'>
+      <h1 id='l-title'>…</h1>
+      <p class='lartist' id='l-artist' hidden></p>
+      <div class='lmeta'>
+        <a class='chip' href='{{ folder_href }}'>{{ icon folder 16 }}{{ folder_name }}</a>
+        <span class='sub' id='l-count'></span>
+      </div>
+    </div>
+    <div class='seek'>
+      <span id='l-cur' class='time'>0:00</span>
+      <input id='l-seek' class='rng' type='range' min='0' max='1000' value='0' step='1' aria-label='Position'>
+      <span id='l-dur' class='time'>0:00</span>
+    </div>
+    <div class='ctrls'>
+      <button id='b-prev' class='abtn' type='button' title='Piste précédente (P)' aria-label='Piste précédente'>{{ icon prev 24 }}</button>
+      <button id='b-back' class='abtn' type='button' title='Reculer de 10 s (J)' aria-label='Reculer de 10 secondes'>{{ icon back10 24 }}</button>
+      <button id='b-play' class='abtn big' type='button' title='Lecture / pause (espace)' aria-label='Lecture'>{{ icon play 24 }}</button>
+      <button id='b-fwd' class='abtn' type='button' title='Avancer de 10 s (L)' aria-label='Avancer de 10 secondes'>{{ icon fwd10 24 }}</button>
+      <button id='b-next' class='abtn' type='button' title='Piste suivante (N)' aria-label='Piste suivante'>{{ icon next 24 }}</button>
+    </div>
+    <div class='modes'>
+      <button id='b-shuffle' class='abtn' type='button' title='Lecture aléatoire (S)' aria-label='Lecture aléatoire' aria-pressed='false'>{{ icon shuffle 24 }}</button>
+      <button id='b-repeat' class='abtn' type='button' title='Répétition (R)' aria-label='Répétition : désactivée' aria-pressed='false'>{{ icon repeat 24 }}</button>
+      <button id='b-rate' class='pill sm' type='button' title='Vitesse de lecture (&lt; et &gt;)'>1×</button>
+      <a class='pill sm' id='l-dl' href='#' title='Télécharger'>{{ icon download 16 }}Télécharger</a>
+    </div>
+    <div class='vol'>
+      <button id='b-mute' class='abtn sm' type='button' title='Muet (M)' aria-label='Muet' aria-pressed='false'>{{ icon volume 18 }}</button>
+      <input id='l-vol' class='rng' type='range' min='0' max='100' value='100' step='1' aria-label='Volume'>
+    </div>
+    <div id='l-msg' class='sub lmsg' role='status'></div>
+    <details class='lkeys'>
+      <summary>Raccourcis clavier</summary>
+      <p class='hint'>
+        <kbd>Espace</kbd> / 
+        <kbd>K</kbd> lecture-pause · 
+        <kbd>N</kbd> suivante · 
+        <kbd>P</kbd> précédente (ou début de la piste) · 
+        <kbd>S</kbd> aléatoire · 
+        <kbd>R</kbd> répétition (aucune, tout, une piste) · 
+        <kbd>{{ icon back 12 ik }}</kbd> 
+        <kbd>{{ icon arrow_right 12 ik }}</kbd> ±5 s · 
+        <kbd>J</kbd> 
+        <kbd>L</kbd> ±10 s · 
+        <kbd>{{ icon arrow_up 12 ik }}</kbd> 
+        <kbd>{{ icon arrow_down 12 ik }}</kbd> volume · 
+        <kbd>M</kbd> muet · 
+        <kbd>0</kbd>–
+        <kbd>9</kbd> aller à 0–90 % · 
+        <kbd>&lt;</kbd> 
+        <kbd>&gt;</kbd> vitesse · 
+        <kbd>/</kbd> chercher dans la liste
+      </p>
+    </details>
+  </section>
+  <aside class='lqueue'>
+    <h2>{{ icon queue 18 }}Dans ce dossier</h2>
+    <input id='l-filter' class='lfilter' type='search' placeholder='Filtrer les pistes' aria-label='Filtrer les pistes' autocomplete='off'>
+    <div id='l-list' class='llist'></div>
+  </aside>
+</main>
+<audio id='l-audio' preload='metadata'></audio>

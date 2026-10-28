@@ -1,0 +1,90 @@
+{# Corps du tableau de bord : les zones vides sont remplies par frontend/js/dashboard/. #}
+<main class='dash'>
+  <div class='dash-head'>
+    <div>
+      <h1 class='dash-title'>Tableau de bord</h1>
+      <div class='sub'>Appareil : 
+        <strong id='host'>…</strong> · 
+        <span id='upd'>chargement…</span>
+      </div>
+    </div>
+    <button id='lock' class='pill' type='button'>{{ icon lock 16 }}Verrouiller</button>
+  </div>
+  <section class='section'>
+    <h2>Mémoire</h2>
+    <div id='mem'>
+      <div class='stats'>
+        <div class='stat'>
+          <div class='label'>Utilisée</div>
+          <div class='value' id='m-used'>–</div>
+        </div>
+        <div class='stat'>
+          <div class='label'>Libre</div>
+          <div class='value' id='m-free'>–</div>
+        </div>
+        <div class='stat'>
+          <div class='label'>Totale</div>
+          <div class='value' id='m-total'>–</div>
+        </div>
+      </div>
+      <div class='meter'>
+        <span id='meter-bar'></span>
+      </div>
+      <div class='sub' id='m-pct'></div>
+    </div>
+    <div class='empty' id='mem-na' hidden>Mémoire indisponible sur ce système.</div>
+  </section>
+  <section class='section' id='disks-sec' hidden>
+    <h2>Stockage</h2>
+    <div class='stats disks' id='disks'></div>
+  </section>
+  <section class='section'>
+    <h2>Appareils connectés 
+      <span class='count' id='n-active'>0</span>
+    </h2>
+    <div class='sub' id='dev-sub'></div>
+    <div class='list' id='devices' style='margin-top:12px'></div>
+  </section>
+  <section class='section' id='hist'>
+    <h2>Historique et analyse</h2>
+    <div class='hbar'>
+      <select id='h-dev' aria-label='Appareil'>
+        <option value='all'>Tous les appareils</option>
+      </select>
+      <select id='h-range' aria-label='Période'>
+        <option value='24h'>24 heures</option>
+        <option value='7d'>7 jours</option>
+        <option value='30d'>30 jours</option>
+      </select>
+      <select id='h-metric' aria-label='Mesure'>
+        <option value='actions'>Actions</option>
+        <option value='seconds'>Durée d'activité</option>
+        <option value='bytes'>Données transférées</option>
+      </select>
+    </div>
+    <div class='empty' id='h-empty' hidden>Aucune activité enregistrée sur cette période.</div>
+    <div id='h-body' hidden>
+      <div class='hcard'>
+        <h3>Activité dans le temps</h3>
+        <div id='h-curve'></div>
+        <div class='sub h-read' id='h-read'></div>
+        <div class='h-legend' id='h-legend'></div>
+      </div>
+      <div class='h-grid'>
+        <div class='hcard'>
+          <h3>Répartition</h3>
+          <div id='h-donut'></div>
+          <div class='share' id='h-share'></div>
+        </div>
+        <div class='hcard'>
+          <h3>Fichiers les plus consultés</h3>
+          <div id='h-top'></div>
+        </div>
+      </div>
+      <div class='hcard'>
+        <h3>Historique des actions</h3>
+        <div class='h-list' id='h-list'></div>
+      </div>
+    </div>
+  </section>
+</main>

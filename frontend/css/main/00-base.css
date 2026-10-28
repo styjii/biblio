@@ -1,0 +1,44 @@
+:root{
+  --bg:#f5f6fa; --bg-2:#e6e9f3;
+  --surface:#ffffff; --text:#161b2e; --muted:#6b7490; --border:#e3e6f0;
+  --accent:#4f5bd5; --accent-soft:#eceeff; --on-accent:#ffffff;
+  --folder:#e0961a; --folder-soft:#fff3dc;
+  --teal:#0f9d9a; --teal-soft:#dcf5f4;
+  --pink:#d6409f; --pink-soft:#fde4f3;
+  --gray-soft:#eceef4; --green:#2e9d5b; --orange:#d9822b;
+  --red:#e5484d; --red-soft:#ffe9ea;
+  --shadow:0 1px 2px rgba(22,27,46,.05),0 4px 14px rgba(22,27,46,.05);
+  --shadow-hover:0 2px 4px rgba(22,27,46,.06),0 12px 28px rgba(79,91,213,.18);
+  --topbar:rgba(255,255,255,.9); --tb:64px;
+  --sel:rgba(79,91,213,.22);
+  --syn-keyword:#a626a4; --syn-string:#3f8f3a; --syn-number:#b35c00; --syn-comment:#8a93a6;
+  --syn-function:#3857d6; --syn-type:#b07d00; --syn-prop:#0b7285; --syn-var:#c0392b; --syn-op:#0184bc;
+  color-scheme:light;
+}
+:root[data-theme='dark']{
+  --bg:#0e1118; --bg-2:#1b2132;
+  --surface:#181d2b; --text:#e8ebf5; --muted:#8a93ad; --border:#262d41;
+  --accent:#8b95ff; --accent-soft:#22274a; --on-accent:#0e1118;
+  --folder:#f2b24a; --folder-soft:#34291a;
+  --teal:#4fd1c5; --teal-soft:#16302f;
+  --pink:#f472b6; --pink-soft:#3a1c2e;
+  --gray-soft:#232a3c; --green:#5fd08d; --orange:#f0a050;
+  --red:#ff6b70; --red-soft:#3a1f24;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.25);
+  --shadow-hover:0 2px 4px rgba(0,0,0,.4),0 12px 28px rgba(0,0,0,.5);
+  --topbar:rgba(14,17,24,.9); --sel:rgba(139,149,255,.3);
+  --syn-keyword:#c678dd; --syn-string:#98c379; --syn-number:#d19a66; --syn-comment:#6b7490;
+  --syn-function:#61afef; --syn-type:#e5c07b; --syn-prop:#56b6c2; --syn-var:#e06c75; --syn-op:#56b6c2;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{
+  margin:0; min-height:100vh; background:var(--bg); color:var(--text);
+  font:16px/1.5 Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased; transition:background .25s,color .25s;
+}
+a{color:inherit;text-decoration:none}
+button{font:inherit}
+.i{flex-shrink:0;display:block}
+

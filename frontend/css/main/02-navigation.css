@@ -1,0 +1,59 @@
+/* ---------- Navigation ---------- */
+main{max-width:1180px; margin:0 auto; padding:20px 16px 56px}
+.crumb{display:flex; flex-wrap:wrap; align-items:center; gap:4px; font-size:14px; color:var(--muted)}
+.crumb a{display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:99px; color:var(--muted); transition:background .15s,color .15s}
+.crumb a:hover{background:var(--accent-soft); color:var(--accent)}
+.crumb a.current{color:var(--text); font-weight:600; background:var(--bg-2)}
+.crumb .sep{opacity:.5; display:inline-flex}
+.toolrow{display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:14px}
+.pill{
+  display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:99px; cursor:pointer;
+  font-size:14px; font-weight:600; color:var(--text); background:var(--surface); border:1px solid var(--border);
+  white-space:nowrap; flex-shrink:0; transition:background .15s,border-color .15s,color .15s;
+}
+.pill:hover{border-color:var(--accent); color:var(--accent)}
+.pill.on{background:var(--accent-soft); border-color:var(--accent); color:var(--accent)}
+.pill.primary{background:var(--accent); border-color:var(--accent); color:var(--on-accent)}
+.pill.primary:hover{filter:brightness(1.08); color:var(--on-accent)}
+.switch{display:inline-flex; align-items:center; gap:10px; cursor:pointer; font-size:14px; user-select:none; color:var(--muted)}
+.switch input{position:absolute; opacity:0; pointer-events:none}
+.switch .track{width:38px; height:22px; border-radius:99px; background:var(--bg-2); border:1px solid var(--border); position:relative; transition:background .2s,border-color .2s}
+.switch .track::after{content:''; position:absolute; left:2px; top:2px; width:16px; height:16px; border-radius:50%; background:var(--muted); transition:transform .2s,background .2s}
+.switch input:checked + .track{background:var(--accent-soft); border-color:var(--accent)}
+.switch input:checked + .track::after{transform:translateX(16px); background:var(--accent)}
+.switch input:focus-visible + .track{outline:2px solid var(--accent); outline-offset:2px}
+
+.section{margin-top:26px}
+.section h2{display:flex; align-items:center; gap:10px; margin:0 0 14px; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted)}
+.count{font-size:12px; letter-spacing:0; text-transform:none; padding:1px 9px; border-radius:99px; background:var(--accent-soft); color:var(--accent)}
+.grid{display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}
+.item,.opt{
+  display:flex; align-items:center; gap:14px; padding:12px 14px; border-radius:14px;
+  background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); overflow-wrap:anywhere;
+  transition:transform .18s,box-shadow .18s,border-color .18s;
+}
+.item:hover,.opt:hover{transform:translateY(-2px); box-shadow:var(--shadow-hover); border-color:var(--accent)}
+.item:focus-visible,.opt:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+body:not(.show-hidden) .dot{display:none}
+.ico{width:44px; height:44px; border-radius:12px; flex-shrink:0; display:grid; place-items:center}
+.ico.folder{background:var(--folder-soft); color:var(--folder)}
+.ico.code,.ico.back{background:var(--accent-soft); color:var(--accent)}
+.ico.web{background:var(--teal-soft); color:var(--teal)}
+.ico.media{background:var(--pink-soft); color:var(--pink)}
+.ico.text,.ico.binary{background:var(--gray-soft); color:var(--muted)}
+.text{flex:1; min-width:0}
+.name{font-weight:600; font-size:15px; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.sub{font-size:12.5px; color:var(--muted); margin-top:2px}
+.go{color:var(--muted); opacity:.6; transition:transform .18s,opacity .18s,color .18s}
+.item:hover .go,.opt:hover .go{transform:translateX(3px); opacity:1; color:var(--accent)}
+.back-link{margin-top:16px; display:flex}
+@media(min-width:600px){.back-link .item{min-width:270px}}
+.empty,.msgcard{
+  margin:28px auto 0; padding:36px 20px; text-align:center; color:var(--muted);
+  background:var(--surface); border:1px dashed var(--border); border-radius:16px; max-width:640px;
+}
+.msgcard{border-style:solid}
+.msgcard h1{margin:0 0 8px; font-size:20px; color:var(--text)}
+.msgcard .pill{margin:14px 6px 0}
+.empty .ico{margin:0 auto 12px; width:56px; height:56px; border-radius:16px}
+

@@ -1,0 +1,16 @@
+{# Lecteur vidéo : vidéo, informations, navigation précédente / suivante et liste du dossier. #}
+<main class='watch'>
+  <div class='player'><video id='player' controls autoplay playsinline preload='metadata' src='/raw?f={{ q }}'>{{ tracks }}</video></div>
+  <section class='info'>
+    <h1 class='vtitle'>{{ title }}</h1>
+    <div class='chips'>
+      <a class='chip' href='{{ folder_href }}'>{{ icon folder 16 }}{{ folder_name }}</a>
+      <span class='chip muted'>{{ size }} · {{ ext }}</span>
+      {{ prev_button }}{{ next_button }}
+      <a class='chip' href='/raw?dl=1&f={{ q }}'>{{ icon download 16 }}Télécharger</a>{{ sub_chips }}
+      <label class='switch'><input type='checkbox' id='autonext' checked><span class='track'></span>Lecture automatique</label>
+    </div>
+    <p class='hint'>Raccourcis : <kbd>K</kbd> lecture/pause · <kbd>J</kbd> -10 s · <kbd>L</kbd> +10 s · <kbd>F</kbd> plein écran · <kbd>M</kbd> muet</p>
+  </section>
+  <aside class='next'><h2>Dans ce dossier</h2><div class='list'>{{ rows }}</div></aside>
+</main>

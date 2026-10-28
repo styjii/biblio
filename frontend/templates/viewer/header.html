@@ -1,0 +1,7 @@
+{# En-tête commun des pages de lecture, d'édition et d'aperçu, suivi de la barre d'outils. #}
+<header class='edbar'>
+  <a class='ibtn' href='{{ back }}' title='Retour' aria-label='Retour'>{{ icon back 20 }}</a>
+  <div class='edtitle'><b>{{ title }}{{ dirty }}</b><small{{ small_attrs }}>{{ subtitle }}</small></div>
+  {{ save_button }}{{ theme_button }}
+</header>
+<div class='edtools'>{{ tools }}</div>

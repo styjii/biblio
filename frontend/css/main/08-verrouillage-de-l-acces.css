@@ -1,0 +1,12 @@
+/* ---------- Verrouillage de l'accès ---------- */
+.ibtn.unlocked{color:var(--green); border-color:var(--green)}
+.pill.locked,.chip.locked{opacity:.6; cursor:not-allowed}
+.pill.locked:hover{border-color:var(--border); color:var(--text)}
+.lkveil{position:fixed; inset:0; z-index:90; display:grid; place-items:center; padding:16px; background:rgba(8,10,16,.55)}
+.lkbox{width:min(100%,380px); display:flex; flex-direction:column; gap:12px; padding:22px; border-radius:20px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow-hover)}
+.lkbox h2{margin:0; font-size:18px}
+.lkbox p{margin:0; color:var(--muted); font-size:14px}
+.lkbox input{padding:12px 14px; font:inherit; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:12px; outline:none}
+.lkbox input:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+.lkbox .lkerr{color:var(--red); min-height:1.3em}
+.lkbox .row{display:flex; gap:8px; justify-content:flex-end}

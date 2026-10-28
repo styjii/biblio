@@ -1,0 +1,43 @@
+/* ---------- Menu (feuille) ---------- */
+.backdrop{position:fixed; inset:0; z-index:50; background:rgba(8,10,18,.55); animation:fade .15s}
+.sheet{
+  position:fixed; z-index:51; left:0; right:0; bottom:0; max-width:520px; margin:0 auto;
+  background:var(--bg); border:1px solid var(--border); border-radius:22px 22px 0 0;
+  padding:16px 14px calc(18px + env(safe-area-inset-bottom,0px)); box-shadow:0 -10px 40px rgba(0,0,0,.35);
+  animation:up .2s ease-out;
+}
+.sheet-head{display:flex; align-items:center; gap:14px; padding:2px 4px 14px}
+.sheet-head .name{font-size:16px}
+#sh-body,.sheet form{display:flex; flex-direction:column; gap:10px}
+.opt .ico{width:40px; height:40px}
+.sheet input[type=text],.sheet input[type=password]{
+  width:100%; padding:12px 14px; font:inherit; color:var(--text); background:var(--surface);
+  border:1px solid var(--border); border-radius:12px; outline:none;
+}
+.sheet input[type=text]:focus,.sheet input[type=password]:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+.err{color:var(--syn-var); font-size:13px; min-height:1.2em}
+.err:empty{display:none}
+.sheet .ico.danger,.sheet .opt.danger .ico{background:var(--red-soft); color:var(--red)}
+.opt.danger:hover{border-color:var(--red)}
+.opt.danger:hover .go{color:var(--red)}
+.pill.danger{background:var(--red); border-color:var(--red); color:#fff}
+.pill.danger:hover{filter:brightness(1.08); color:#fff}
+.pill:disabled{opacity:.6; pointer-events:none}
+#uppick,#uprun{display:flex; flex-direction:column; gap:10px}
+.upbar{height:8px; border-radius:99px; background:var(--surface); border:1px solid var(--border); overflow:hidden}
+.upbar i{display:block; height:100%; width:0; background:var(--accent); transition:width .15s}
+.uplist{max-height:34vh; overflow:auto; display:flex; flex-direction:column; gap:4px; font-size:13px}
+.uprow{display:flex; justify-content:space-between; gap:12px; padding:2px 4px}
+.uprow .n{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0}
+.uprow .s{flex:none; color:var(--muted); display:inline-flex; align-items:center; gap:4px}
+.uprow .sico{display:inline-grid} .uprow .sico svg{width:14px; height:14px}
+.uprow.run .s{color:var(--accent)}
+.uprow.ok .s{color:var(--green)}
+.uprow.skip .s{color:var(--orange)}
+.uprow.bad .s{color:var(--red)}
+@media(min-width:700px){
+  .sheet{bottom:auto; top:50%; transform:translateY(-50%); border-radius:22px; animation:fade .15s}
+}
+@keyframes up{from{transform:translateY(30px); opacity:0}to{transform:none; opacity:1}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+
