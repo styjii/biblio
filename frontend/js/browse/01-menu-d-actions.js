@@ -21,15 +21,27 @@
   var wrap = document.getElementById('sheet');
   var bodyEl = document.getElementById('sh-body');
 
-  var upRunning = false, upDirty = false;
+  var upRunning = false, upDirty = false, upMin = false, upMinimize = null;
   function closeSheet(){
-    if (upRunning) return;
-    var reload = upDirty;
+    var upShown = !document.getElementById('updlg').hidden;
+    // Envoi en cours : fermer la feuille d'envoi la masque (l'envoi continue) au lieu de ne rien faire.
+    if (upRunning && upShown && upMinimize) { upMinimize(); return; }
+    var reload = upDirty && upShown && !upRunning;
+    if (upShown) { upMin = false; document.getElementById('up-tab').hidden = true; }
     wrap.hidden = true; document.getElementById('newdlg').hidden = true; document.getElementById('deldlg').hidden = true;
     document.getElementById('rendlg').hidden = true; document.getElementById('edtdlg').hidden = true;
     document.getElementById('updlg').hidden = true; bodyEl.innerHTML = '';
     if (reload) location.reload();
   }
+  // Feuille ouverte : la page derrière ne défile plus (la molette / le doigt ne font défiler que le menu).
+  function lockScroll(){
+    var root = document.documentElement, on = !wrap.hidden;
+    if (on === root.classList.contains('noscroll')) return;
+    root.style.paddingRight = on && window.innerWidth > root.clientWidth ? (window.innerWidth - root.clientWidth) + 'px' : '';
+    root.classList.toggle('noscroll', on);
+  }
+  new MutationObserver(lockScroll).observe(wrap, {attributes: true, attributeFilter: ['hidden']});
+  lockScroll();
   function esc(s){ return s.replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
   function openMenu(a){

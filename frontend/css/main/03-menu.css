@@ -1,6 +1,8 @@
 /* ---------- Menu (feuille) ---------- */
-.backdrop{position:fixed; inset:0; z-index:50; background:rgba(8,10,18,.55); animation:fade .15s}
+html.noscroll,html.noscroll-lk{overflow:hidden}
+.backdrop{position:fixed; inset:0; z-index:50; background:rgba(8,10,18,.55); animation:fade .15s; overscroll-behavior:contain; touch-action:none}
 .sheet{
+  max-height:calc(100vh - 24px); max-height:calc(100dvh - 24px); overflow-y:auto; overscroll-behavior:contain;
   position:fixed; z-index:51; left:0; right:0; bottom:0; max-width:520px; margin:0 auto;
   background:var(--bg); border:1px solid var(--border); border-radius:22px 22px 0 0;
   padding:16px 14px calc(18px + env(safe-area-inset-bottom,0px)); box-shadow:0 -10px 40px rgba(0,0,0,.35);
@@ -26,7 +28,7 @@
 #uppick,#uprun{display:flex; flex-direction:column; gap:10px}
 .upbar{height:8px; border-radius:99px; background:var(--surface); border:1px solid var(--border); overflow:hidden}
 .upbar i{display:block; height:100%; width:0; background:var(--accent); transition:width .15s}
-.uplist{max-height:34vh; overflow:auto; display:flex; flex-direction:column; gap:4px; font-size:13px}
+.uplist{max-height:34vh; overflow:auto; overscroll-behavior:contain; display:flex; flex-direction:column; gap:4px; font-size:13px}
 .uprow{display:flex; justify-content:space-between; gap:12px; padding:2px 4px}
 .uprow .n{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0}
 .uprow .s{flex:none; color:var(--muted); display:inline-flex; align-items:center; gap:4px}
@@ -35,6 +37,13 @@
 .uprow.ok .s{color:var(--green)}
 .uprow.skip .s{color:var(--orange)}
 .uprow.bad .s{color:var(--red)}
+.uptab{
+  position:fixed; z-index:49; right:16px; bottom:calc(16px + env(safe-area-inset-bottom,0px));
+  display:inline-flex; align-items:center; gap:8px; padding:11px 16px; border-radius:99px; cursor:pointer;
+  font-size:14px; font-weight:600; color:var(--text); border:1px solid var(--accent); box-shadow:var(--shadow-hover);
+  background:linear-gradient(90deg,var(--accent-soft) var(--p,0%),var(--surface) var(--p,0%));
+}
+.uptab:hover{color:var(--accent)}
 @media(min-width:700px){
   .sheet{bottom:auto; top:50%; transform:translateY(-50%); border-radius:22px; animation:fade .15s}
 }

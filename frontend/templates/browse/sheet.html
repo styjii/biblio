@@ -85,6 +85,7 @@
           <div class='name'>Envoyer dans ce dossier</div>
           <div class='sub' id='up-dest'></div>
         </div>
+        <button class='ibtn' id='up-min' type='button' hidden aria-label='Masquer la section des envois' title='Masquer (l’envoi continue)'>{{ icon minus 18 }}</button>
         <button class='ibtn' data-close type='button' aria-label='Fermer'>{{ icon close 18 }}</button>
       </div>
       <div id='upform' hidden style='display:flex;flex-direction:column;gap:10px'>
@@ -127,3 +128,4 @@
     </div>
   </div>
 </div>
+<button id='up-tab' class='uptab' type='button' hidden aria-label='Afficher la section des envois'>{{ icon upload 16 }}<span id='up-tab-txt'>Envoi</span></button>

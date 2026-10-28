@@ -23,8 +23,9 @@
       '<p class="lkerr" role="alert"></p><div class="row"><button type="button" class="pill" data-x>Annuler</button>' +
       '<button type="submit" class="pill primary">Déverrouiller</button></div></form>';
     document.body.appendChild(veil);
+    document.documentElement.classList.add('noscroll-lk');
     var f = veil.firstChild, pw = f.querySelector('input'), err = f.querySelector('.lkerr'), go = f.querySelector('[type=submit]');
-    function close(){ veil.remove(); document.removeEventListener('keydown', onKey); }
+    function close(){ veil.remove(); document.documentElement.classList.remove('noscroll-lk'); document.removeEventListener('keydown', onKey); }
     function onKey(e){ if (e.key === 'Escape') close(); }
     document.addEventListener('keydown', onKey);
     veil.addEventListener('click', function(e){ if (e.target === veil) close(); });

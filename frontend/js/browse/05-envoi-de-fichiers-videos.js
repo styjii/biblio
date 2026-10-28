@@ -11,7 +11,24 @@
     };
     var upShow = function(step){
       ['upform', 'uppick', 'uprun'].forEach(function(id){ upEl(id).hidden = (id !== step); });
+      upEl('up-min').hidden = (step !== 'uprun');
     };
+    // Masquer / afficher la section des envois : l'envoi continue, un onglet flottant permet de la rouvrir.
+    var upTab = upEl('up-tab');
+    var upTabSet = function(txt, p){
+      upEl('up-tab-txt').textContent = txt;
+      if (p !== undefined) upTab.style.setProperty('--p', p + '%');
+    };
+    upMinimize = function(){
+      upMin = true; upEl('updlg').hidden = true; wrap.hidden = true; upTab.hidden = false;
+    };
+    var upRestore = function(){
+      upMin = false; upTab.hidden = true;
+      ['sheet-main', 'newdlg', 'deldlg', 'rendlg', 'edtdlg'].forEach(function(id){ upEl(id).hidden = true; });
+      upEl('updlg').hidden = false; wrap.hidden = false;
+    };
+    upEl('up-min').addEventListener('click', upMinimize);
+    upTab.addEventListener('click', upRestore);
 
     var upMsg = function(text){ upEl('uperr').textContent = text; upShow('upform'); };
     var upLocked = function(){
@@ -31,6 +48,7 @@
     };
 
     upBtn.addEventListener('click', function(){
+      if (upMin) { upRestore(); return; }
       upEl('sheet-main').hidden = true; upEl('newdlg').hidden = true; upEl('deldlg').hidden = true; upEl('rendlg').hidden = true; upEl('edtdlg').hidden = true;
       upEl('updlg').hidden = false; wrap.hidden = false;
       upEl('up-dest').textContent = '/' + (cfg.folder || '');
@@ -69,6 +87,7 @@
       upShow('uprun');
       upEl('up-done').hidden = true; upEl('up-cancel').hidden = false;
       upEl('up-bar').style.width = '0%';
+      upTabSet('Envoi 0 %', 0);
       upRunning = true; upCancel = false;
       window.addEventListener('beforeunload', upWarn);
 
@@ -76,6 +95,7 @@
       var setBar = function(bytes){
         var p = total ? Math.min(100, bytes / total * 100) : 100;
         upEl('up-bar').style.width = p + '%';
+        upTabSet('Envoi ' + Math.round(p) + ' %', p);
         upEl('up-sum').textContent = (ok + skipped + failed) + ' / ' + items.length + ' · ' + fmtB(Math.min(bytes, total)) + ' sur ' + fmtB(total);
       };
       var mark = function(it, cls, txt, ico){
@@ -92,6 +112,7 @@
         upEl('up-sum').textContent = ok + ' envoyé(s)' + (skipped ? ' · ' + skipped + ' déjà présent(s)' : '') +
           (failed ? ' · ' + failed + ' en échec' : '') + (msg ? ' · ' + msg : '');
         if (ok) upDirty = true;
+        upTabSet(msg ? 'Envoi interrompu' : (failed ? 'Envoi terminé · ' + failed + ' en échec' : 'Envoi terminé'), 100);
       };
       var next = function(){
         if (upCancel) return finish('arrêté');
