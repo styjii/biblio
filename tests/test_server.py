@@ -92,6 +92,30 @@ class ServerTests(unittest.TestCase):
                 self.assertEqual(status, 403)
                 self.assertIn('"locked": true', body)
 
+    def test_page_404_stylee(self):
+        status, r, body = self.fetch("GET", "/page-inexistante", cookie=self.cookie)
+        self.assertEqual(status, 404)
+        self.assertIn("text/html", r.getheader("Content-Type"))
+        for marker in ("errcard", "Page introuvable", ">404<", "/page-inexistante", "Retour à l'accueil"):
+            self.assertIn(marker, body)
+
+    def test_page_404_fichier_et_echappement(self):
+        status, body = self.get("/view?f=absent.txt")
+        self.assertEqual(status, 404)
+        self.assertIn("Fichier introuvable", body)
+        status, _, body = self.fetch("GET", "/%3Cscript%3Ealert(1)%3C/script%3E", cookie=self.cookie)
+        self.assertEqual(status, 404)
+        self.assertNotIn("<script>alert(1)", body)
+        self.assertIn("&lt;script&gt;", body)
+
+    def test_erreurs_brutes_pour_ressources_et_post(self):
+        status, r, body = self.fetch("GET", "/thumb?f=absent.mp4", cookie=self.cookie)
+        self.assertEqual(status, 404)
+        self.assertNotIn("errcard", body)
+        status, r, body = self.fetch("POST", "/inconnu", b"", XHR, self.cookie)
+        self.assertEqual(status, 404)
+        self.assertNotIn("errcard", body)
+
 
 if __name__ == "__main__":
     unittest.main()

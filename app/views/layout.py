@@ -60,6 +60,39 @@ def message_page(title, text, actions=""):
             + doc_close(THEME_JS))
 
 
+# code HTTP -> (icône, ton, titre, explication)
+ERROR_PAGES = {
+    400: ("close", "warn", "Requête invalide", "Cette requête n'a pas pu être comprise. Vérifie l'adresse et réessaie."),
+    401: ("lock", "warn", "Accès protégé", "Ouvre le lien complet affiché dans le terminal au démarrage de biblio."),
+    403: ("ban", "danger", "Accès refusé", "Tu n'as pas l'autorisation d'ouvrir cette page ou ce fichier."),
+    404: ("search", "", "Page introuvable", "La page ou le fichier demandé n'existe pas, a été déplacé ou a été renommé."),
+    405: ("ban", "warn", "Action non autorisée", "Cette action n'est pas disponible sur cette page."),
+    413: ("upload", "warn", "Fichier trop volumineux", "Le fichier dépasse la taille maximale autorisée."),
+    416: ("close", "warn", "Plage invalide", "La partie demandée du fichier n'existe pas."),
+    500: ("refresh", "danger", "Erreur interne", "Quelque chose s'est mal passé côté serveur. Réessaie dans un instant."),
+}
+ERROR_BACK_JS = ("var b=document.getElementById('err-back');"
+                 "if(b){if(history.length<2){b.hidden=true}"
+                 "else{b.addEventListener('click',function(){history.back()})}}")
+
+
+def error_page(code, detail="", where=""):
+    """Page d'erreur HTTP : code, titre, explication, adresse demandée et boutons de sortie.
+    `detail` : message précis de l'application (« Fichier introuvable »…) ; `where` : chemin demandé."""
+    ic, tone, title, text = ERROR_PAGES.get(code, ("close", "danger" if code >= 500 else "warn", f"Erreur {code}",
+                                                  "Une erreur est survenue."))
+    detail_html = (render("pages/error_detail", detail=escape(detail))
+                   if detail and detail.strip().casefold() != title.casefold() else "")
+    where_html = render("pages/error_where", icon_svg=icon("globe", 14),
+                        where=escape(where)) if where else ""
+    actions = (render("components/pill_home")
+               + render("components/pill_history_back"))
+    return (doc_open(f"{title} — Ma bibliothèque") + topbar(False)
+            + render("pages/error", code=code, tone=tone, title=escape(title), text=escape(text),
+                     icon_svg=icon(ic, 30), detail=detail_html, where=where_html, actions=actions)
+            + doc_close(THEME_JS + ERROR_BACK_JS))
+
+
 EDIT_LOCKED_HINT = "Accès verrouillé : déverrouille l'accès (cadenas de la liste des fichiers) pour modifier ce fichier."
 
 

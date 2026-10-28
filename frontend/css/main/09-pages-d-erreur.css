@@ -1,0 +1,35 @@
+/* ---------- Pages d'erreur (404, 403, 500…) ---------- */
+.errcard{
+  margin:clamp(24px,8vh,72px) auto 0; padding:40px 24px 32px; max-width:560px; text-align:center;
+  background:var(--surface); border:1px solid var(--border); border-radius:20px; box-shadow:var(--shadow);
+}
+.errico{
+  width:64px; height:64px; margin:0 auto 6px; display:grid; place-items:center; border-radius:20px;
+  background:var(--accent-soft); color:var(--accent);
+}
+.errico.warn{background:var(--folder-soft); color:var(--folder)}
+.errico.danger{background:var(--red-soft); color:var(--red)}
+.errico .i{width:30px; height:30px}
+.errcode{
+  font-size:clamp(64px,18vw,96px); font-weight:800; line-height:1.05; letter-spacing:-.04em;
+  background:linear-gradient(135deg,var(--accent),var(--pink)); -webkit-background-clip:text; background-clip:text;
+  color:transparent; -webkit-text-fill-color:transparent; user-select:none;
+}
+.errcode.warn{background-image:linear-gradient(135deg,var(--folder),var(--orange))}
+.errcode.danger{background-image:linear-gradient(135deg,var(--red),var(--pink))}
+.errcard h1{margin:4px 0 8px; font-size:22px; letter-spacing:-.01em}
+.errtext{margin:0 auto; max-width:42ch; color:var(--muted); font-size:15px}
+.errdetail{margin:10px 0 0; font-size:13px; color:var(--muted)}
+.errwhere{
+  margin:18px auto 0; max-width:100%; display:inline-flex; align-items:center; gap:8px; justify-content:center;
+  padding:8px 12px; border-radius:12px; background:var(--bg); border:1px solid var(--border);
+  font-size:13px; color:var(--muted); text-align:left;
+}
+.errwhere .i{width:14px; height:14px; flex-shrink:0}
+.errwhere code{
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text);
+  font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+.erractions{margin-top:24px; display:flex; flex-wrap:wrap; gap:10px; justify-content:center}
+.erractions .pill{margin:0}
+@media(max-width:480px){.errcard{padding:32px 18px 26px} .erractions .pill{flex:1 1 100%; justify-content:center}}

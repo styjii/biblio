@@ -1,0 +1,11 @@
+{# Page d'erreur HTTP (404, 403, 500…). `code` : numéro ; `icon_svg` : icône ; `detail` / `where` : blocs HTML facultatifs ; `actions` : boutons HTML. #}
+<main>
+<section class='errcard' role='alert'>
+<div class='errico {{ tone }}'>{{ icon_svg }}</div>
+<div class='errcode {{ tone }}' aria-hidden='true'>{{ code }}</div>
+<h1>{{ title }}</h1>
+<p class='errtext'>{{ text }}</p>
+{{ detail }}{{ where }}
+<div class='erractions'>{{ actions }}</div>
+</section>
+</main>

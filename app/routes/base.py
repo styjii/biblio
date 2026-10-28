@@ -4,13 +4,14 @@ import hmac
 import json
 import re
 from http.cookies import SimpleCookie
+from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from app import config
 from app.devices import add_bytes, classify, is_blocked, record_event, track_device
 from app.security import unlock_scopes
-from app.views.layout import message_page
+from app.views.layout import error_page, message_page
 
 
 class BaseHandler(BaseHTTPRequestHandler):
@@ -20,6 +21,39 @@ class BaseHandler(BaseHTTPRequestHandler):
 
     def send_bytes(self, content, ctype, status=200, extra=None):
         self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        for k, v in (extra or {}).items():
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(content)
+        add_bytes(self._entry, len(content))
+
+    # Ressources chargées par la page elle-même (vignettes, sous-titres, scripts…) : erreur brute, sans page HTML.
+    _PLAIN_ERROR_PREFIXES = ("/thumb", "/cover", "/meta", "/sub", "/static/", "/docs/", "/legacy/",
+                             "/build/", "/web/", "/dashboard/", "/s/")
+
+    def send_error(self, code, message=None, explain=None):
+        """Réponse d'erreur : page HTML aux couleurs de l'application pour une navigation (GET),
+        réponse HTTP standard pour le reste (POST, HEAD, ressources internes, codes sans corps)."""
+        path = unquote(urlsplit(getattr(self, "path", "") or "").path)
+        if (self.command != "GET" or code < 400 or path.startswith(self._PLAIN_ERROR_PREFIXES)):
+            return super().send_error(code, message, explain)
+        self.log_error("code %d, message %s", code, message)
+        where = path if len(path) <= 200 else path[:197] + "…"
+        self.close_connection = True
+        try:
+            body = error_page(code, message or "", where)
+        except Exception:                       # jamais d'échec dans la page d'erreur elle-même
+            return super().send_error(code, message, explain)
+        reason = HTTPStatus(code).phrase if code in HTTPStatus._value2member_map_ else "Erreur"
+        self.send_response(code, reason)
+        self.send_bytes_body(body.encode("utf-8"), "text/html; charset=utf-8",
+                             {"Cache-Control": "no-store", "Connection": "close"})
+
+    def send_bytes_body(self, content, ctype, extra=None):
+        """Fin d'une réponse dont send_response() a déjà été appelé."""
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(content)))
         self.send_header("X-Content-Type-Options", "nosniff")
