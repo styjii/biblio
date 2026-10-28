@@ -10,7 +10,8 @@
     var bar = $('meter-bar');
     bar.style.width = m.percent + '%';
     bar.className = meterClass(m.percent);
-    $('m-pct').textContent = pct(m.percent) + ' % utilisée · libre = mémoire disponible (cache récupérable inclus)';
+    $('m-pct-val').textContent = pct(m.percent) + ' %';
+    $('m-pct').textContent = 'Libre = mémoire disponible (cache récupérable inclus)';
   }
   function disks(list){
     var box = $('disks');

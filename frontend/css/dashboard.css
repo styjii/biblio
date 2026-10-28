@@ -6,6 +6,7 @@
 .stat .label{font-size:12.5px; font-weight:600; color:var(--muted)}
 .stat .value{margin-top:4px; font-size:24px; font-weight:700; letter-spacing:-.01em}
 .stat .meter{margin-top:10px}
+.stat.wide{grid-column:1/-1}
 .meter{height:10px; margin-top:14px; border-radius:99px; background:var(--bg-2); overflow:hidden}
 .meter span{display:block; height:100%; width:0; border-radius:99px; background:var(--green); transition:width .4s,background .3s}
 .meter span.warn{background:var(--orange)}
@@ -20,8 +21,13 @@
 .tag{font-size:11.5px; font-weight:600; padding:1px 8px; border-radius:99px; background:var(--gray-soft); color:var(--muted)}
 .tag.me{background:var(--accent-soft); color:var(--accent)}
 .tag.bad{background:var(--red-soft); color:var(--red)}
-.pill.danger{color:var(--red); border-color:var(--red)}
-.pill.danger:hover{background:var(--red-soft); color:var(--red)}
+/* « Bloquer » : le fond rouge plein de main/03-menu.css (.pill.danger) était combiné ici à un texte rouge
+   (rouge sur rouge, mot illisible). On fixe un fond neutre explicite : texte rouge sur fond de carte. */
+.dev .pill.danger{
+  background:var(--surface); border-color:var(--red); filter:none;
+  color:var(--red); color:color-mix(in srgb,var(--red) 78%,var(--text));
+}
+.dev .pill.danger:hover{background:var(--red-soft); border-color:var(--red); filter:none; color:var(--red); color:color-mix(in srgb,var(--red) 78%,var(--text))}
 .hbar{display:flex; flex-wrap:wrap; gap:10px; margin:12px 0 0}
 .hbar select{max-width:100%; padding:7px 14px; font:inherit; font-size:14px; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:99px}
 .hcard{margin-top:12px; padding:14px 16px; border-radius:14px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow)}
@@ -45,7 +51,10 @@
 .share div{display:flex; justify-content:space-between; gap:10px}
 .top-row{margin:10px 0}
 .top-row .name{font-weight:600; overflow-wrap:anywhere}
-.top-row .bar{height:6px; margin-top:6px; border-radius:99px; background:var(--bg-2); overflow:hidden}
+/* `.bar` (main/06-videos.css) est la barre de reprise des vignettes : position absolue collée en bas du bloc
+   positionné le plus proche. Ici aucun parent n'est positionné, elle se collait au bas de la fenêtre sur toute la
+   largeur (fausse « barre de chargement »). On la remet dans le flux normal. */
+.top-row .bar{position:static; left:auto; right:auto; bottom:auto; height:6px; margin-top:6px; border-radius:99px; background:var(--bg-2); overflow:hidden}
 .top-row .bar span{display:block; height:100%; border-radius:99px}
 .h-list{max-height:380px; overflow:auto}
 .h-item{display:grid; grid-template-columns:auto 1fr; gap:2px 12px; padding:8px 0; border-top:1px solid var(--border); font-size:13px}
