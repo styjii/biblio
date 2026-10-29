@@ -6,9 +6,9 @@ from pathlib import Path
 from urllib.parse import quote, unquote
 
 from app import config
-from app.assets import bundle_bytes
+from app.assets import editor_bundle
 from app.config import BUNDLE
-from app.devices import add_bytes
+from app.devices import monitor
 from app.filesystem import guess_mime, kind_of, rel_of
 from app.filetypes import AUDIO_EXT, IMAGE_EXT, VIDEO_EXT
 
@@ -27,7 +27,7 @@ class _ZipSink:
 
     def write(self, data):
         self.wfile.write(data)
-        add_bytes(self.entry, len(data))
+        monitor.history.add_bytes(self.entry, len(data))
         return len(data)
 
     def flush(self):
@@ -36,7 +36,7 @@ class _ZipSink:
 
 class ServeRoutes:
     def route_raw(self, rel, download):
-        p = config.resolve_inside(rel)
+        p = config.paths.resolve(rel)
         if p is None or not p.is_file():
             self.send_error(404, "Fichier introuvable")
             return
@@ -54,7 +54,7 @@ class ServeRoutes:
 
     def route_zip(self, rel):
         """GET /zip?f=<dossier> : archive ZIP du dossier et de son contenu, construite au fil de l'envoi."""
-        p = config.resolve_inside(rel)
+        p = config.paths.resolve(rel)
         if p is None or not p.is_dir():
             self.send_error(404, "Dossier introuvable")
             return
@@ -82,7 +82,7 @@ class ServeRoutes:
                     zf.writestr(info, b"")
                 for name in sorted(filenames, key=str.casefold):
                     fp = here / name
-                    if config.is_env_file(fp) or (name.startswith(".") and name.endswith(".fl-tmp")) or not fp.is_file():
+                    if config.paths.is_env_file(fp) or (name.startswith(".") and name.endswith(".fl-tmp")) or not fp.is_file():
                         continue
                     try:
                         with open(fp, "rb"):
@@ -100,7 +100,7 @@ class ServeRoutes:
         if len(parts) < 4 or not config.token_ok(unquote(parts[2])):
             self.send_error(403, "Accès refusé")
             return
-        p = config.resolve_inside(unquote(parts[3]))
+        p = config.paths.resolve(unquote(parts[3]))
         if p is not None and p.is_dir():
             for name in ("index.html", "index.htm"):
                 if (p / name).is_file():
@@ -118,7 +118,7 @@ class ServeRoutes:
         if not BUNDLE.is_file():
             self.send_error(404, "editor.bundle.js introuvable à côté de server.py")
             return
-        b = bundle_bytes()
+        b = editor_bundle.get()
         headers = {"Cache-Control": "public, max-age=86400", "Vary": "Accept-Encoding"}
         if "gzip" in self.headers.get("Accept-Encoding", ""):
             headers["Content-Encoding"] = "gzip"
@@ -127,7 +127,7 @@ class ServeRoutes:
             self.send_bytes(b["raw"], "text/javascript; charset=utf-8", 200, headers)
 
     def route_pdf(self, rel):
-        p = config.resolve_inside(rel)
+        p = config.paths.resolve(rel)
         if p is None or not p.is_file() or p.suffix.lower() != ".pdf":
             self.send_error(404, "PDF introuvable")
             return
@@ -141,7 +141,7 @@ class ServeRoutes:
         self.end_headers()
 
     def route_docs(self, path):
-        p = config.resolve_inside(unquote(path[len("/docs/"):]))
+        p = config.paths.resolve(unquote(path[len("/docs/"):]))
         if p is None or not p.is_file() or p.suffix.lower() != ".pdf":
             self.send_error(404, "PDF introuvable")
             return

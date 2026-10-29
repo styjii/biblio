@@ -40,14 +40,23 @@ DASH_CSS = asset("css/dashboard.css")
 DASH_JS = asset("js/dashboard")
 LISTEN_CSS = asset("css/listen.css")
 LISTEN_JS = asset("js/listen")
-_bundle_cache = {}
 
 
-def bundle_bytes():
-    """Bundle de l'éditeur (editor.bundle.js) : contenu, version gzip et version (mtime), rechargé si modifié."""
-    st = config.BUNDLE.stat()
-    key = st.st_mtime_ns
-    if _bundle_cache.get("key") != key:
-        raw = config.BUNDLE.read_bytes()
-        _bundle_cache.update(key=key, raw=raw, gz=gzip.compress(raw, 6), v=str(key))
-    return _bundle_cache
+class EditorBundle:
+    """Bundle JavaScript de l'éditeur (editor.bundle.js) : contenu, version gzip et version (mtime), rechargé si modifié."""
+
+    def __init__(self, path):
+        self.path = path
+        self._key = None
+        self._data = {}
+
+    def get(self):
+        key = self.path.stat().st_mtime_ns
+        if self._key != key:
+            raw = self.path.read_bytes()
+            self._data = {"raw": raw, "gz": gzip.compress(raw, 6), "v": str(key)}
+            self._key = key
+        return self._data
+
+
+editor_bundle = EditorBundle(config.BUNDLE)

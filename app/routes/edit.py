@@ -19,10 +19,10 @@ class EditRoutes:
         if config.READONLY:
             self.send_json({"ok": False, "error": "Mode lecture seule"}, 403)
             return
-        if config.PASSWORD and "files" not in config.unlock_scopes(self.dash_session_id()):
+        if config.PASSWORD and "files" not in config.sessions.scopes(self.dash_session_id()):
             self.send_json({"ok": False, "error": "Accès verrouillé", "locked": True}, 403)
             return
-        p = config.resolve_inside(arg("f"))
+        p = config.paths.resolve(arg("f"))
         if p is None or not p.name:
             self.send_json({"ok": False, "error": "Chemin non autorisé"}, 403)
             return
@@ -93,11 +93,11 @@ class EditRoutes:
         if not config.PASSWORD:
             self.send_json({"ok": False, "error": "Suppression désactivée : BIBLIO_PASSWORD absent du .env"}, 403)
             return
-        if "files" not in config.unlock_scopes(self.dash_session_id()):
+        if "files" not in config.sessions.scopes(self.dash_session_id()):
             self.send_json({"ok": False, "error": "Accès verrouillé", "locked": True}, 403)
             return
 
-        p = config.resolve_inside(q.get("f", [""])[0])
+        p = config.paths.resolve(q.get("f", [""])[0])
         if p is None or p == config.ROOT:
             self.send_json({"ok": False, "error": "Chemin non autorisé"}, 403)
             return
@@ -106,7 +106,7 @@ class EditRoutes:
             return
         try:
             if p.is_dir() and not p.is_symlink():      # vrai dossier : supprimé avec tout son contenu
-                if config.holds_protected(p):
+                if config.paths.holds_protected(p):
                     self.send_json({"ok": False, "error": "Ce dossier contient le serveur ou son fichier .env"}, 403)
                     return
                 shutil.rmtree(p)        # ne suit pas les liens symboliques contenus dans le dossier
@@ -125,25 +125,25 @@ class EditRoutes:
         if not config.PASSWORD:
             self.send_json({"ok": False, "error": "Renommage désactivé : BIBLIO_PASSWORD absent du .env"}, 403)
             return
-        if "files" not in config.unlock_scopes(self.dash_session_id()):
+        if "files" not in config.sessions.scopes(self.dash_session_id()):
             self.send_json({"ok": False, "error": "Accès verrouillé", "locked": True}, 403)
             return
-        p = config.resolve_inside(q.get("f", [""])[0])
+        p = config.paths.resolve(q.get("f", [""])[0])
         if p is None or p == config.ROOT:
             self.send_json({"ok": False, "error": "Chemin non autorisé"}, 403)
             return
         if not os.path.lexists(p):
             self.send_json({"ok": False, "error": "Fichier introuvable"}, 404)
             return
-        if p.is_dir() and not p.is_symlink() and config.holds_protected(p):
+        if p.is_dir() and not p.is_symlink() and config.paths.holds_protected(p):
             self.send_json({"ok": False, "error": "Ce dossier contient le serveur ou son fichier .env"}, 403)
             return
         new = q.get("to", [""])[0].strip()
-        if not config.valid_name(new):
+        if not config.paths.valid_name(new):
             self.send_json({"ok": False, "error": "Nom invalide"}, 400)
             return
         target = p.with_name(new)
-        if config.is_env_path(target):
+        if config.paths.is_env_path(target):
             self.send_json({"ok": False, "error": "Nom réservé"}, 403)
             return
         if new != p.name and os.path.lexists(target):
@@ -167,10 +167,10 @@ class EditRoutes:
         if config.READONLY:
             self.send_json({"ok": False, "error": "Mode lecture seule"}, 403)
             return
-        if config.PASSWORD and "files" not in config.unlock_scopes(self.dash_session_id()):
+        if config.PASSWORD and "files" not in config.sessions.scopes(self.dash_session_id()):
             self.send_json({"ok": False, "error": "Accès verrouillé", "locked": True}, 403)
             return
-        parent = config.resolve_inside(q.get("d", [""])[0])
+        parent = config.paths.resolve(q.get("d", [""])[0])
         if parent is None:
             self.send_json({"ok": False, "error": "Chemin non autorisé"}, 403)
             return
@@ -178,7 +178,7 @@ class EditRoutes:
             self.send_json({"ok": False, "error": "Dossier parent introuvable"}, 404)
             return
         name = q.get("to", [""])[0].strip()
-        if not config.valid_name(name):
+        if not config.paths.valid_name(name):
             self.send_json({"ok": False, "error": "Nom invalide"}, 400)
             return
         target = parent / name

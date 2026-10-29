@@ -43,7 +43,7 @@ def list_dir(current):
     except (PermissionError, OSError):
         return None, None
     folders = [p for p in entries if p.is_dir()]  # is_dir() suit les liens symboliques
-    files = [p for p in entries if p.is_file() and not config.is_env_file(p)]
+    files = [p for p in entries if p.is_file() and not config.paths.is_env_file(p)]
     return folders, files
 
 

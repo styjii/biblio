@@ -5,7 +5,7 @@ from app import config
 
 class AuthRoutes:
     def route_lock_state(self):
-        scopes = config.unlock_scopes(self.dash_session_id())
+        scopes = config.sessions.scopes(self.dash_session_id())
         self.send_json({"enabled": bool(config.PASSWORD or config.DASH_PASSWORD), "unlocked": bool(scopes),
                         "files": "files" in scopes, "dash": "dash" in scopes})
 
@@ -22,15 +22,15 @@ class AuthRoutes:
             self.send_json({"ok": False, "error": "Requête invalide"}, 400)
             return
         given = self.rfile.read(length).decode("utf-8", "replace")
-        ok, msg = config.check_password(self.client_address[0], given, [config.PASSWORD, config.DASH_PASSWORD])
+        ok, msg = config.passwords.check(self.client_address[0], given, [config.PASSWORD, config.DASH_PASSWORD])
         if not ok:
             self.send_json({"ok": False, "error": msg}, 429 if msg.startswith("Trop") else 403)
             return
-        scopes = config.password_scopes(given)
-        sid = config.grant_unlock(self.dash_session_id(), scopes)
+        scopes = config.passwords.scopes(given)
+        sid = config.sessions.grant(self.dash_session_id(), scopes)
         self.send_json({"ok": True, "files": "files" in scopes, "dash": "dash" in scopes},
                        extra={"Set-Cookie": f"{config.UNLOCK_COOKIE}={sid}; Path=/; HttpOnly; SameSite=Strict"})
 
     def route_lock(self):
-        config.drop_dash_session(self.dash_session_id())
+        config.sessions.drop(self.dash_session_id())
         self.send_json({"ok": True}, extra={"Set-Cookie": f"{config.UNLOCK_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"})

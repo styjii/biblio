@@ -6,7 +6,7 @@ from urllib.parse import quote
 from app.filesystem import rel_of
 from app.filetypes import CODE_EXT, MD_EXT
 from app.icons import icon
-from app.media import media_key
+from app.media import media
 from app.templating import render
 from app.utils import fmt_size
 
@@ -74,7 +74,7 @@ def video_card(p):
     q = quote(rel_of(p), safe="")
     return render("components/video_card",
                   dot=" dot" if p.name.startswith(".") else "",
-                  q=q, key=media_key(p), title=escape(p.name, quote=True),
+                  q=q, key=media.key(p), title=escape(p.name, quote=True),
                   size=_size_of(p), ext=p.suffix[1:].upper(),
                   name_key=escape(p.name.casefold(), quote=True),
                   more_button=render("components/more_button"), name=escape(p.stem))
@@ -84,5 +84,5 @@ def video_row(p, current):
     q = quote(rel_of(p), safe="")
     size = _size_of(p)
     return render("components/video_row",
-                  cur=" cur" if p == current else "", q=q, key=media_key(p),
+                  cur=" cur" if p == current else "", q=q, key=media.key(p),
                   name=escape(p.stem), sub="En lecture" if p == current else size)

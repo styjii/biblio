@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from app import config
-from app.devices import add_bytes, classify, is_blocked, record_event, track_device
+from app.devices import ActivityHistory, monitor
 from app.views.layout import error_page, message_page
 
 
@@ -19,14 +19,7 @@ class BaseHandler(BaseHTTPRequestHandler):
 
     def send_bytes(self, content, ctype, status=200, extra=None):
         self.send_response(status)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(content)))
-        self.send_header("X-Content-Type-Options", "nosniff")
-        for k, v in (extra or {}).items():
-            self.send_header(k, v)
-        self.end_headers()
-        self.wfile.write(content)
-        add_bytes(self._entry, len(content))
+        self.send_bytes_body(content, ctype, extra)
 
     # Ressources chargées par la page elle-même (vignettes, sous-titres, scripts…) : erreur brute, sans page HTML.
     _PLAIN_ERROR_PREFIXES = ("/thumb", "/cover", "/meta", "/sub", "/static/", "/docs/", "/legacy/",
@@ -59,7 +52,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(content)
-        add_bytes(self._entry, len(content))
+        monitor.history.add_bytes(self._entry, len(content))
 
     def send_html(self, html, status=200):
         self.send_bytes(html.encode("utf-8"), "text/html; charset=utf-8", status,
@@ -116,7 +109,7 @@ class BaseHandler(BaseHTTPRequestHandler):
                     if not chunk:
                         break
                     self.wfile.write(chunk)
-                    add_bytes(self._entry, len(chunk))
+                    monitor.history.add_bytes(self._entry, len(chunk))
                     remaining -= len(chunk)
         except (BrokenPipeError, ConnectionResetError):
             pass
@@ -125,22 +118,22 @@ class BaseHandler(BaseHTTPRequestHandler):
         if not super().parse_request():
             return False
         ip = self.client_address[0]
-        if is_blocked(ip):
+        if monitor.blocklist.is_blocked(ip):
             self.close_connection = True
             self.send_html(message_page("Accès bloqué", "Cet appareil a été bloqué par l'administrateur."), 403)
             return False
         req = urlsplit(self.path)
         authed = self.has_cookie()
-        track_device(ip, self.headers.get("User-Agent", ""), authed, hit=not req.path.startswith("/dashboard/"))
+        monitor.track(ip, self.headers.get("User-Agent", ""), authed, hit=not req.path.startswith("/dashboard/"))
         self._entry = None
         if not req.path.startswith("/dashboard"):
             if req.path.startswith("/s/"):     # les aperçus web s'authentifient par le jeton dans l'URL
                 parts = req.path.split("/", 3)
                 authed = authed or (len(parts) > 2 and config.token_ok(unquote(parts[2])))
             if authed:
-                action = classify(req.path, parse_qs(req.query))
+                action = ActivityHistory.classify(req.path, parse_qs(req.query))
                 if action:
-                    self._entry = record_event(ip, *action)
+                    self._entry = monitor.history.record(ip, *action)
         return True
 
     def has_cookie(self):
@@ -161,7 +154,7 @@ class BaseHandler(BaseHTTPRequestHandler):
 
     def files_locked(self):
         """Vrai si un mot de passe est configuré et que cette session n'est pas déverrouillée."""
-        return bool(config.PASSWORD) and "files" not in config.unlock_scopes(self.dash_session_id())
+        return bool(config.PASSWORD) and "files" not in config.sessions.scopes(self.dash_session_id())
 
     def dash_session_id(self):
         c = SimpleCookie()

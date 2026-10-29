@@ -1,6 +1,7 @@
 """Petits utilitaires sans dépendance applicative."""
 
 import json
+import os
 import re
 import subprocess
 
@@ -27,3 +28,14 @@ def lan_ips():
         return [ip for ip in out if ":" not in ip]
     except (OSError, subprocess.SubprocessError):
         return []
+
+
+def atomic_write(path, text, mode=0o600):
+    """Écrit un fichier texte de façon atomique (fichier temporaire puis remplacement), avec ces droits."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)

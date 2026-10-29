@@ -37,10 +37,10 @@ class UploadRoutes:
         if not config.PASSWORD:
             self.send_json({"ok": False, "error": "Envoi désactivé : BIBLIO_PASSWORD absent du .env"}, 403)
             return
-        if "files" not in config.unlock_scopes(self.dash_session_id()):
+        if "files" not in config.sessions.scopes(self.dash_session_id()):
             self.send_json({"ok": False, "error": "Accès verrouillé", "locked": True}, 403)
             return
-        self.send_json({"ok": True, "ticket": config.issue_ticket(), "ttl": TICKET_TTL})
+        self.send_json({"ok": True, "ticket": config.tickets.issue(), "ttl": config.TICKET_TTL})
 
     def route_upload(self, q):
         """POST /upload?d=<dossier>&n=<chemin relatif>[&o=1] ; corps : contenu du fichier (en flux)."""
@@ -59,17 +59,17 @@ class UploadRoutes:
             return self.upload_error(length, "Mode lecture seule", 403)
         if not config.PASSWORD:
             return self.upload_error(length, "Envoi désactivé : BIBLIO_PASSWORD absent du .env", 403)
-        if "files" not in config.unlock_scopes(self.dash_session_id()):
+        if "files" not in config.sessions.scopes(self.dash_session_id()):
             return self.upload_error(length, "Accès verrouillé", 403, "locked")
-        if not config.use_ticket(self.headers.get("X-Upload-Ticket", "")):
+        if not config.tickets.use(self.headers.get("X-Upload-Ticket", "")):
             return self.upload_error(length, "Session d'envoi expirée : rouvre « Envoyer »", 403, "ticket")
         if config.MAX_UPLOAD and length > config.MAX_UPLOAD:
             return self.upload_error(length, f"Fichier trop volumineux (maximum {fmt_size(config.MAX_UPLOAD)})", 413)
 
-        parts = config.clean_upload_name(arg("n"))
+        parts = config.paths.clean_upload_name(arg("n"))
         if parts is None:
             return self.upload_error(length, "Nom de fichier invalide", 400)
-        folder = config.resolve_inside(arg("d"))
+        folder = config.paths.resolve(arg("d"))
         if folder is None:
             return self.upload_error(length, "Dossier non autorisé", 403)
         if not folder.is_dir():
@@ -79,7 +79,7 @@ class UploadRoutes:
             final.relative_to(config.ROOT)
         except ValueError:
             return self.upload_error(length, "Chemin non autorisé", 403)
-        if config.is_env_file(final):
+        if config.paths.is_env_file(final):
             return self.upload_error(length, "Chemin non autorisé", 403)
 
         overwrite = arg("o") == "1"

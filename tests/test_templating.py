@@ -4,14 +4,14 @@ import re
 import unittest
 from pathlib import Path
 
-from app.templating import TEMPLATES_DIR, _TOKEN, _COMMENT, render
+from app.templating import TEMPLATES_DIR, TemplateEngine, render
 
 APP = Path(__file__).resolve().parent.parent / "app"
 
 
 def template_variables(name):
-    raw = _COMMENT.sub("", (TEMPLATES_DIR / (name + ".html")).read_text(encoding="utf-8"))
-    return {m.group(4) for m in _TOKEN.finditer(raw) if m.group(4)}
+    raw = TemplateEngine.COMMENT.sub("", (TEMPLATES_DIR / (name + ".html")).read_text(encoding="utf-8"))
+    return {m.group(4) for m in TemplateEngine.TOKEN.finditer(raw) if m.group(4)}
 
 
 def render_calls():
@@ -62,8 +62,8 @@ class TemplateConsistency(unittest.TestCase):
 
     def test_les_gabarits_n_ont_pas_de_jeton_inconnu(self):
         for path in TEMPLATES_DIR.rglob("*.html"):
-            text = _COMMENT.sub("", path.read_text(encoding="utf-8"))
-            leftovers = re.sub(_TOKEN, "", text)
+            text = TemplateEngine.COMMENT.sub("", path.read_text(encoding="utf-8"))
+            leftovers = re.sub(TemplateEngine.TOKEN, "", text)
             self.assertNotIn("{{", leftovers, path.name)
 
 
