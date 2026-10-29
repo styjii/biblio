@@ -24,8 +24,13 @@ def render_calls():
             if any(k.arg is None for k in node.keywords):
                 continue  # **valeurs : non vérifiable statiquement
             first = node.args[0]
-            names = ([first.value] if isinstance(first, ast.Constant)
-                     else [first.body.value, first.orelse.value] if isinstance(first, ast.IfExp) else [])
+            if isinstance(first, ast.Constant):
+                candidates = [first]
+            elif isinstance(first, ast.IfExp):
+                candidates = [first.body, first.orelse]
+            else:
+                candidates = []
+            names = [c.value for c in candidates if isinstance(c, ast.Constant) and isinstance(c.value, str)]
             for name in names:  # `render("a" if cond else "b")` : les deux gabarits doivent convenir
                 yield path.name, name, {k.arg for k in node.keywords}
 

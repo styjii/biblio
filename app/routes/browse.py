@@ -11,9 +11,10 @@ from app.templating import render
 from app.utils import js_json
 from app.views.cards import GROUPS, file_card, group_of, video_card
 from app.views.layout import doc_close, doc_open, lock_script, topbar
+from app.routes.base import BaseHandler
 
 
-class BrowseRoutes:
+class BrowseRoutes(BaseHandler):
     def page_browse(self, folder):
         current = config.paths.resolve(folder)
         if current is None:
@@ -23,7 +24,7 @@ class BrowseRoutes:
             self.send_error(404, "Dossier introuvable")
             return
         folders, files = list_dir(current)
-        if folders is None:
+        if folders is None or files is None:
             self.send_error(403, "Accès refusé")
             return
 

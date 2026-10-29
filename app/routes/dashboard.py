@@ -8,9 +8,10 @@ from app.devices import DeviceTracker, monitor
 from app.sysinfo import SystemInfo
 from app.views.dashboard import dashboard_page
 from app.views.layout import message_page, pill_link
+from app.routes.base import BaseHandler
 
 
-class DashboardRoutes:
+class DashboardRoutes(BaseHandler):
     def page_dashboard(self):
         if not config.DASH_PASSWORD:
             self.send_html(message_page(

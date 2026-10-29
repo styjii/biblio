@@ -9,9 +9,10 @@ from app import config
 from app.config import MAX_SAVE
 from app.filesystem import is_binary_file
 from app.utils import fmt_size
+from app.routes.base import BaseHandler
 
 
-class EditRoutes:
+class EditRoutes(BaseHandler):
     def route_save(self, q):
         def arg(name, default=""):
             return q.get(name, [default])[0]

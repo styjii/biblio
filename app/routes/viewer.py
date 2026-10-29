@@ -13,6 +13,7 @@ from app.templating import render
 from app.utils import fmt_size, js_json
 from app.views.layout import (doc_close, doc_open, edit_pill, folder_label_of, folder_url, locked_page, message_page,
                               pill_link, theme_button)
+from app.routes.base import BaseHandler
 
 
 def unreadable_page(p, err, q, back):
@@ -24,7 +25,7 @@ def unreadable_page(p, err, q, back):
     return message_page(p.name, msg, actions)
 
 
-class ViewerRoutes:
+class ViewerRoutes(BaseHandler):
     def page_text(self, rel, edit, new=False):
         p = config.paths.resolve(rel)
         if p is None:

@@ -81,7 +81,7 @@ class EnvFile:
     """Fichier .env (CLE=valeur) : jeton d'accès et mots de passe. Une variable d'environnement de même nom l'emporte."""
 
     def __init__(self, path=None):
-        self.path = path
+        self.path = path            # Path, ou None tant que load() n'a pas été appelé
         self.values = {}
 
     def load(self, path):
@@ -116,6 +116,8 @@ class EnvFile:
 
     def set(self, key, value):
         """Ajoute ou remplace CLE=valeur dans le fichier (écriture atomique, droits 0600)."""
+        if self.path is None:
+            raise OSError("aucun fichier .env défini")
         try:
             lines = self.path.read_text(encoding="utf-8-sig").splitlines()
         except OSError:
@@ -132,10 +134,12 @@ class EnvFile:
 
     def permissions_warning(self):
         """Message d'avertissement si le fichier est lisible par d'autres utilisateurs, sinon chaîne vide."""
+        if self.path is None:
+            return ""
         try:
             if self.path.stat().st_mode & 0o077:
                 return f"Attention : {self.path.name} est lisible par d'autres utilisateurs (chmod 600 recommandé)."
-        except (OSError, AttributeError):
+        except OSError:
             pass
         return ""
 
@@ -267,7 +271,7 @@ class TicketStore:
             for t in [t for t, exp in self._expires.items() if exp < now]:
                 del self._expires[t]
             while len(self._expires) >= self.MAX_TICKETS:
-                del self._expires[min(self._expires, key=self._expires.get)]
+                del self._expires[min(self._expires, key=lambda t: self._expires[t])]
             ticket = secrets.token_urlsafe(24)
             self._expires[ticket] = now + TICKET_TTL
         return ticket

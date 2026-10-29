@@ -4,7 +4,6 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 from app import config
 from app.routes.auth import AuthRoutes
-from app.routes.base import BaseHandler
 from app.routes.browse import BrowseRoutes
 from app.routes.dashboard import DashboardRoutes
 from app.routes.edit import EditRoutes
@@ -17,9 +16,10 @@ POSTS = ("/save", "/delete", "/rename", "/mkdir", "/upload-auth", "/upload", "/u
 DASH_POSTS = ("/dashboard/block", "/dashboard/unblock")
 
 
-class FileHandler(BaseHandler, BrowseRoutes, ViewerRoutes, PlayerRoutes, ServeRoutes, EditRoutes, UploadRoutes,
-                  AuthRoutes, DashboardRoutes):
-    """Un gestionnaire = le socle HTTP + une famille de routes par module de `app/routes/`."""
+class FileHandler(BrowseRoutes, ViewerRoutes, PlayerRoutes, ServeRoutes, EditRoutes, UploadRoutes, AuthRoutes,
+                  DashboardRoutes):
+    """Un gestionnaire = une famille de routes par module de `app/routes/`. Chacune hérite du socle HTTP
+    `BaseHandler` (send_html, send_json…), ce qui permet à l'éditeur de connaître ces méthodes."""
 
     def do_GET(self):
         req = urlsplit(self.path)

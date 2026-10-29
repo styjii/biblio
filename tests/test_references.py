@@ -32,10 +32,21 @@ class ReferenceTests(unittest.TestCase):
                 obj = SHARED[cur.id]
                 for attr in reversed(chain):
                     if not hasattr(obj, attr):
-                        missing.append(f"{path.relative_to(APP.parent)}:{node.lineno} {cur.id}.{'.'.join(reversed(chain))}")
+                        missing.append(f"{path.relative_to(APP.parent)}:{getattr(node, 'lineno', '?')} {cur.id}.{'.'.join(reversed(chain))}")
                         break
                     obj = getattr(obj, attr)
         self.assertEqual(missing, [])
+
+    def test_les_routes_heritent_du_socle_http(self):
+        """Chaque famille de routes hérite de BaseHandler : l'éditeur (Pyright) connaît send_html, send_json, self.path…"""
+        import importlib
+        from app.routes.base import BaseHandler
+        for module in ("auth", "browse", "dashboard", "edit", "player", "serve", "upload", "viewer"):
+            mod = importlib.import_module(f"app.routes.{module}")
+            classes = [c for n, c in vars(mod).items() if n.endswith("Routes") and isinstance(c, type)]
+            self.assertTrue(classes, module)
+            for cls in classes:
+                self.assertTrue(issubclass(cls, BaseHandler), f"{module}.{cls.__name__}")
 
 
 if __name__ == "__main__":

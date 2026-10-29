@@ -1,9 +1,10 @@
 """Verrouillage / déverrouillage de l'accès."""
 
 from app import config
+from app.routes.base import BaseHandler
 
 
-class AuthRoutes:
+class AuthRoutes(BaseHandler):
     def route_lock_state(self):
         scopes = config.sessions.scopes(self.dash_session_id())
         self.send_json({"enabled": bool(config.PASSWORD or config.DASH_PASSWORD), "unlocked": bool(scopes),

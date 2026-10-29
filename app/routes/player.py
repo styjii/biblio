@@ -12,9 +12,10 @@ from app.templating import render
 from app.utils import fmt_size, js_json
 from app.views.cards import video_row
 from app.views.layout import EDIT_LOCKED_HINT, doc_close, doc_open, folder_url, topbar
+from app.routes.base import BaseHandler
 
 
-class PlayerRoutes:
+class PlayerRoutes(BaseHandler):
     def page_watch(self, rel):
         p = config.paths.resolve(rel)
         if p is None or not p.is_file() or kind_of(p) != "video":

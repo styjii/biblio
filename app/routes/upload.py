@@ -10,9 +10,10 @@ from pathlib import Path
 from app import config
 from app.config import DRAIN_MAX, UPLOAD_CHUNK, UPLOAD_MIN_FREE
 from app.utils import fmt_size
+from app.routes.base import BaseHandler
 
 
-class UploadRoutes:
+class UploadRoutes(BaseHandler):
     def drain(self, length):
         """Lit et jette le corps restant : sans cela le navigateur perd la réponse d'erreur."""
         if length < 0 or length > DRAIN_MAX:

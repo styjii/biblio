@@ -46,7 +46,7 @@ class ServerTests(unittest.TestCase):
                 time.sleep(0.25)
         else:
             raise RuntimeError("le serveur ne démarre pas")
-        cls.cookie = cls.fetch("GET", f"/?token={TOKEN}")[1].getheader("Set-Cookie").split(";")[0]
+        cls.cookie = cls.fetch("GET", f"/?token={TOKEN}")[1].getheader("Set-Cookie", "").split(";")[0]
 
     @classmethod
     def tearDownClass(cls):
@@ -99,7 +99,7 @@ class ServerTests(unittest.TestCase):
     def test_page_404_stylee(self):
         status, r, body = self.fetch("GET", "/page-inexistante", cookie=self.cookie)
         self.assertEqual(status, 404)
-        self.assertIn("text/html", r.getheader("Content-Type"))
+        self.assertIn("text/html", r.getheader("Content-Type", ""))
         for marker in ("errcard", "Page introuvable", ">404<", "/page-inexistante", "Retour à l'accueil"):
             self.assertIn(marker, body)
 
@@ -124,7 +124,7 @@ class ServerTests(unittest.TestCase):
     def unlocked_cookie(self):
         status, r, _ = self.fetch("POST", "/unlock", PASSWORD.encode(), XHR, self.cookie)
         self.assertEqual(status, 200)
-        return self.cookie + "; " + r.getheader("Set-Cookie").split(";")[0]
+        return self.cookie + "; " + r.getheader("Set-Cookie", "").split(";")[0]
 
     def raw(self, method, path, cookie=None, body=None, headers=None):
         conn = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
@@ -163,7 +163,7 @@ class ServerTests(unittest.TestCase):
         status, r, data = self.raw("GET", "/zip?f=Cours%20%C3%A9t%C3%A9")
         self.assertEqual(status, 200)
         self.assertEqual(r.getheader("Content-Type"), "application/zip")
-        self.assertIn("attachment", r.getheader("Content-Disposition"))
+        self.assertIn("attachment", r.getheader("Content-Disposition", ""))
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             self.assertIsNone(zf.testzip())
             names = set(zf.namelist())
@@ -198,7 +198,9 @@ class ServerTests(unittest.TestCase):
             for ident in ("w-prev", "w-next", "w-back", "w-fwd", "w-shuffle", "w-repeat", "w-rate", "w-mute", "w-vol", "w-msg"):
                 self.assertIn(f"id='{ident}'", page)
             self.assertNotIn("class='btn'", page)                     # plus de liens « Précédente / Suivante » figés
-            cfg = json.loads(re.search(r"window\.WCFG = (\{.*?\});", page).group(1))
+            found = re.search(r"window\.WCFG = (\{.*?\});", page)
+            self.assertIsNotNone(found)
+            cfg = json.loads(found.group(1)) if found else {}
             self.assertEqual([i["f"] for i in cfg["items"]], ["clip-a.mp4", "clip-b.mp4", "clip-c.mp4"])
             self.assertEqual(cfg["index"], 1)
             self.assertEqual(cfg["items"][2]["u"], "/watch?f=clip-c.mp4")

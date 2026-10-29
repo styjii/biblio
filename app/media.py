@@ -128,7 +128,7 @@ class MediaLibrary:
             j = {}
         fmt = j.get("format") or {}
         try:
-            d = float(fmt.get("duration"))
+            d = float(fmt.get("duration") or 0)
             info["duration"] = d if d > 0 else None
         except (TypeError, ValueError):
             pass

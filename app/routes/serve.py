@@ -11,6 +11,7 @@ from app.config import BUNDLE
 from app.devices import monitor
 from app.filesystem import guess_mime, kind_of, rel_of
 from app.filetypes import AUDIO_EXT, IMAGE_EXT, VIDEO_EXT
+from app.routes.base import BaseHandler
 
 # Formats déjà compressés : stockés tels quels dans l'archive (gain de temps, pas de gain de taille à espérer).
 STORED_EXT = VIDEO_EXT | AUDIO_EXT | IMAGE_EXT | {
@@ -25,16 +26,19 @@ class _ZipSink:
     def __init__(self, wfile, entry):
         self.wfile, self.entry = wfile, entry
 
-    def write(self, data):
+    def write(self, data, /):
         self.wfile.write(data)
         monitor.history.add_bytes(self.entry, len(data))
         return len(data)
 
-    def flush(self):
+    def flush(self) -> None:
         self.wfile.flush()
 
+    def close(self) -> None:
+        pass            # la socket appartient au serveur HTTP : on ne la ferme pas
 
-class ServeRoutes:
+
+class ServeRoutes(BaseHandler):
     def route_raw(self, rel, download):
         p = config.paths.resolve(rel)
         if p is None or not p.is_file():
