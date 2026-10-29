@@ -3,14 +3,29 @@
   <div class='player'><video id='player' controls autoplay playsinline preload='metadata' src='/raw?f={{ q }}'>{{ tracks }}</video></div>
   <section class='info'>
     <h1 class='vtitle'>{{ title }}</h1>
+    <div class='wbar'>
+      <div class='wctrls' role='group' aria-label='Commandes du lecteur'>
+        <button id='w-prev' class='abtn' type='button' title='Vidéo précédente (P)' aria-label='Vidéo précédente'>{{ icon prev 24 }}</button>
+        <button id='w-back' class='abtn' type='button' title='Reculer de 10 s (J)' aria-label='Reculer de 10 secondes'>{{ icon back10 24 }}</button>
+        <button id='w-fwd' class='abtn' type='button' title='Avancer de 10 s (L)' aria-label='Avancer de 10 secondes'>{{ icon fwd10 24 }}</button>
+        <button id='w-next' class='abtn' type='button' title='Vidéo suivante (N)' aria-label='Vidéo suivante'>{{ icon next 24 }}</button>
+        <button id='w-shuffle' class='abtn' type='button' title='Lecture aléatoire (S)' aria-label='Lecture aléatoire' aria-pressed='false'>{{ icon shuffle 24 }}</button>
+        <button id='w-repeat' class='abtn' type='button' title='Répétition (R)' aria-label='Répétition : désactivée' aria-pressed='false'>{{ icon repeat 24 }}</button>
+        <button id='w-rate' class='pill sm' type='button' title='Vitesse de lecture (&lt; et &gt;)'>1×</button>
+        <span class='wvol'>
+          <button id='w-mute' class='abtn sm' type='button' title='Muet (M)' aria-label='Muet' aria-pressed='false'>{{ icon volume 18 }}</button>
+          <input id='w-vol' class='rng' type='range' min='0' max='100' value='100' step='1' aria-label='Volume'>
+        </span>
+      </div>
+      <div id='w-msg' class='sub wmsg' role='status'></div>
+    </div>
     <div class='chips'>
       <a class='chip' href='{{ folder_href }}'>{{ icon folder 16 }}{{ folder_name }}</a>
       <span class='chip muted'>{{ size }} · {{ ext }}</span>
-      {{ prev_button }}{{ next_button }}
       <a class='chip' href='/raw?dl=1&f={{ q }}'>{{ icon download 16 }}Télécharger</a>{{ sub_chips }}
       <label class='switch'><input type='checkbox' id='autonext' checked><span class='track'></span>Lecture automatique</label>
     </div>
-    <p class='hint'>Raccourcis : <kbd>K</kbd> lecture/pause · <kbd>J</kbd> -10 s · <kbd>L</kbd> +10 s · <kbd>F</kbd> plein écran · <kbd>M</kbd> muet</p>
+    <p class='hint'>Raccourcis : <kbd>K</kbd> lecture/pause · <kbd>J</kbd> <kbd>L</kbd> ±10 s · <kbd>N</kbd> suivante · <kbd>P</kbd> précédente (ou début) · <kbd>S</kbd> aléatoire · <kbd>R</kbd> répétition (aucune, tout, une vidéo) · <kbd>{{ icon arrow_up 12 ik }}</kbd> <kbd>{{ icon arrow_down 12 ik }}</kbd> volume · <kbd>&lt;</kbd> <kbd>&gt;</kbd> vitesse · <kbd>M</kbd> muet · <kbd>F</kbd> plein écran</p>
   </section>
   <aside class='next'><h2>Dans ce dossier</h2><div class='list'>{{ rows }}</div></aside>
 </main>

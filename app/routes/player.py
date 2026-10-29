@@ -25,9 +25,8 @@ class PlayerRoutes:
         try:
             idx = siblings.index(p)
         except ValueError:
-            idx = -1
-        prev_p = siblings[idx - 1] if idx > 0 else None
-        next_p = siblings[idx + 1] if 0 <= idx < len(siblings) - 1 else None
+            siblings.insert(0, p)
+            idx = 0
 
         def watch_url(x):
             return "/watch?f=" + quote(rel_of(x), safe="")
@@ -54,20 +53,16 @@ class PlayerRoutes:
                 else:
                     sub_chips += render("player/subtitle_chip", q=fq, label=escape(label))
 
-        def nav_btn(target, kind, text):
-            if target is None:
-                return render("player/nav_button_disabled", icon_svg=icon(kind, 16), text=text)
-            return render("player/nav_button", href=watch_url(target), icon_svg=icon(kind, 16), text=text)
-
         page = render("player/watch", q=q, tracks=tracks, title=escape(p.stem),
                       folder_href=folder_url(p.parent), folder_name=escape(folder_name),
                       size=size, ext=p.suffix[1:].upper(),
-                      prev_button=nav_btn(prev_p, "prev", "Précédente"),
-                      next_button=nav_btn(next_p, "next", "Suivante"),
                       sub_chips=sub_chips, rows="".join(video_row(v, p) for v in siblings))
-        cfg = {"key": f"{config.ROOT_ID}:{rel_of(p)}", "next": watch_url(next_p) if next_p else None}
+        cfg = {"key": f"{config.ROOT_ID}:{rel_of(p)}", "folder": f"{config.ROOT_ID}:{rel_of(p.parent)}",
+               "index": idx, "items": [{"f": rel_of(x), "u": watch_url(x)} for x in siblings]}
+        wico = {n: icon(n, 24) for n in ("repeat", "repeat1", "volume", "mute")}
         self.send_html(doc_open(f"{p.stem} — Ma bibliothèque") + topbar(False) + page
-                       + doc_close(f"window.WCFG = {js_json(cfg)}; {THEME_JS}{DECORATE_JS}{WATCH_JS}"))
+                       + doc_close(f"window.WCFG = {js_json(cfg)}; window.WICO = {js_json(wico)}; "
+                                   f"{THEME_JS}{DECORATE_JS}{WATCH_JS}"))
 
     def page_listen(self, rel):
         p = config.paths.resolve(rel)

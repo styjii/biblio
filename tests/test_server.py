@@ -1,6 +1,8 @@
 """Démarrage réel du serveur sur un dossier temporaire : pages principales, verrouillage, droits d'écriture."""
 import http.client
+import json
 import io
+import re
 import os
 import subprocess
 import sys
@@ -185,6 +187,25 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.fetch("GET", "/zip?f=lib")[0], 401)
         self.assertEqual(self.get("/zip?f=absent")[0], 404)
         self.assertEqual(self.get("/zip?f=notes.txt")[0], 404)
+
+    def test_lecteur_video_commandes_et_liste(self):
+        lib = Path(self.tmp.name) / "lib"
+        for name in ("clip-a.mp4", "clip-b.mp4", "clip-c.mp4"):
+            (lib / name).write_bytes(b"\x00" * 16)
+        try:
+            status, page = self.get("/watch?f=clip-b.mp4")
+            self.assertEqual(status, 200)
+            for ident in ("w-prev", "w-next", "w-back", "w-fwd", "w-shuffle", "w-repeat", "w-rate", "w-mute", "w-vol", "w-msg"):
+                self.assertIn(f"id='{ident}'", page)
+            self.assertNotIn("class='btn'", page)                     # plus de liens « Précédente / Suivante » figés
+            cfg = json.loads(re.search(r"window\.WCFG = (\{.*?\});", page).group(1))
+            self.assertEqual([i["f"] for i in cfg["items"]], ["clip-a.mp4", "clip-b.mp4", "clip-c.mp4"])
+            self.assertEqual(cfg["index"], 1)
+            self.assertEqual(cfg["items"][2]["u"], "/watch?f=clip-c.mp4")
+            self.assertIn("window.WICO", page)
+        finally:
+            for name in ("clip-a.mp4", "clip-b.mp4", "clip-c.mp4"):
+                (lib / name).unlink()
 
 
 if __name__ == "__main__":

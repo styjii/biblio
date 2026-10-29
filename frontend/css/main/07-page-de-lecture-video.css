@@ -11,6 +11,14 @@
 .player video{width:100%; height:100%; display:block; background:#000; object-fit:contain}
 .info{grid-area:info; min-width:0}
 .vtitle{margin:0; font-size:21px; line-height:1.3; font-weight:700; letter-spacing:-.01em; overflow-wrap:anywhere}
+/* commandes : précédente / suivante, ±10 s, aléatoire, répétition, vitesse, volume */
+.wbar{margin-top:12px}
+.wctrls{display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px}
+.wctrls .abtn{width:42px; height:42px}
+.wctrls #w-prev svg,.wctrls #w-next svg{fill:currentColor}
+.wvol{display:flex; align-items:center; gap:6px; flex:1 1 150px; max-width:240px; margin-left:auto}
+.wvol input{flex:1; min-width:0}
+.wmsg{min-height:18px; margin-top:4px}
 .chips{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:14px}
 .chip,.btn{
   display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:99px; font-size:14px; font-weight:500;
