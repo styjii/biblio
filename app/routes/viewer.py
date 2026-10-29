@@ -6,10 +6,9 @@ from urllib.parse import quote
 from app import config
 from app.assets import MD_CSS, MD_JS, PREVIEW_JS, THEME_JS, VIEWER_JS, bundle_bytes
 from app.config import MAX_TEXT
-from app.filesystem import kind_of, load_text, rel_of, resolve_inside
+from app.filesystem import kind_of, load_text, rel_of
 from app.filetypes import AUDIO_EXT, BINARY_EXT, IMAGE_EXT, MD_EXT, VIDEO_EXT, WEB_EXT
 from app.icons import icon
-from app.security import unlock_scopes
 from app.templating import render
 from app.utils import fmt_size, js_json
 from app.views.layout import (doc_close, doc_open, edit_pill, folder_label_of, folder_url, locked_page, message_page,
@@ -27,7 +26,7 @@ def unreadable_page(p, err, q, back):
 
 class ViewerRoutes:
     def page_text(self, rel, edit, new=False):
-        p = resolve_inside(rel)
+        p = config.resolve_inside(rel)
         if p is None:
             self.send_error(403, "Fichier non autorisé")
             return
@@ -35,7 +34,7 @@ class ViewerRoutes:
             self.send_html(message_page("Mode lecture seule",
                                         "Le serveur a été lancé avec l'option lecture seule : l'édition est désactivée."), 403)
             return
-        if edit and config.PASSWORD and "files" not in unlock_scopes(self.dash_session_id()):
+        if edit and config.PASSWORD and "files" not in config.unlock_scopes(self.dash_session_id()):
             self.send_html(locked_page(f"Modifier « {p.name} »", "files", folder_url(p.parent)), 403)
             return
 
@@ -121,7 +120,7 @@ class ViewerRoutes:
         return render("viewer/keys_bar", keys="".join(items))
 
     def page_preview(self, rel):
-        p = resolve_inside(rel)
+        p = config.resolve_inside(rel)
         if p is None or not p.is_file():
             self.send_error(404, "Fichier introuvable")
             return

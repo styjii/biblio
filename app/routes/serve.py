@@ -1,6 +1,5 @@
 """Service de fichiers : contenu brut, sites, bundle de l'éditeur, PDF et pdf.js."""
 
-import hmac
 import os
 import zipfile
 from pathlib import Path
@@ -10,7 +9,7 @@ from app import config
 from app.assets import bundle_bytes
 from app.config import BUNDLE
 from app.devices import add_bytes
-from app.filesystem import guess_mime, is_env_file, kind_of, rel_of, resolve_inside
+from app.filesystem import guess_mime, kind_of, rel_of
 from app.filetypes import AUDIO_EXT, IMAGE_EXT, VIDEO_EXT
 
 # Formats déjà compressés : stockés tels quels dans l'archive (gain de temps, pas de gain de taille à espérer).
@@ -37,7 +36,7 @@ class _ZipSink:
 
 class ServeRoutes:
     def route_raw(self, rel, download):
-        p = resolve_inside(rel)
+        p = config.resolve_inside(rel)
         if p is None or not p.is_file():
             self.send_error(404, "Fichier introuvable")
             return
@@ -55,7 +54,7 @@ class ServeRoutes:
 
     def route_zip(self, rel):
         """GET /zip?f=<dossier> : archive ZIP du dossier et de son contenu, construite au fil de l'envoi."""
-        p = resolve_inside(rel)
+        p = config.resolve_inside(rel)
         if p is None or not p.is_dir():
             self.send_error(404, "Dossier introuvable")
             return
@@ -83,7 +82,7 @@ class ServeRoutes:
                     zf.writestr(info, b"")
                 for name in sorted(filenames, key=str.casefold):
                     fp = here / name
-                    if is_env_file(fp) or (name.startswith(".") and name.endswith(".fl-tmp")) or not fp.is_file():
+                    if config.is_env_file(fp) or (name.startswith(".") and name.endswith(".fl-tmp")) or not fp.is_file():
                         continue
                     try:
                         with open(fp, "rb"):
@@ -98,10 +97,10 @@ class ServeRoutes:
     def route_site(self, path):
         """Aperçu des pages web : /s/<token>/<chemin> (isolé par CSP sandbox)."""
         parts = path.split("/", 3)  # ['', 's', token, rest]
-        if len(parts) < 4 or not hmac.compare_digest(unquote(parts[2]).encode("utf-8", "replace"), config.TOKEN.encode()):
+        if len(parts) < 4 or not config.token_ok(unquote(parts[2])):
             self.send_error(403, "Accès refusé")
             return
-        p = resolve_inside(unquote(parts[3]))
+        p = config.resolve_inside(unquote(parts[3]))
         if p is not None and p.is_dir():
             for name in ("index.html", "index.htm"):
                 if (p / name).is_file():
@@ -128,7 +127,7 @@ class ServeRoutes:
             self.send_bytes(b["raw"], "text/javascript; charset=utf-8", 200, headers)
 
     def route_pdf(self, rel):
-        p = resolve_inside(rel)
+        p = config.resolve_inside(rel)
         if p is None or not p.is_file() or p.suffix.lower() != ".pdf":
             self.send_error(404, "PDF introuvable")
             return
@@ -142,7 +141,7 @@ class ServeRoutes:
         self.end_headers()
 
     def route_docs(self, path):
-        p = resolve_inside(unquote(path[len("/docs/"):]))
+        p = config.resolve_inside(unquote(path[len("/docs/"):]))
         if p is None or not p.is_file() or p.suffix.lower() != ".pdf":
             self.send_error(404, "PDF introuvable")
             return

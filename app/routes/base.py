@@ -1,6 +1,5 @@
 """Socle du gestionnaire HTTP : envoi des réponses, cookies, session."""
 
-import hmac
 import json
 import re
 from http.cookies import SimpleCookie
@@ -10,7 +9,6 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from app import config
 from app.devices import add_bytes, classify, is_blocked, record_event, track_device
-from app.security import unlock_scopes
 from app.views.layout import error_page, message_page
 
 
@@ -138,8 +136,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         if not req.path.startswith("/dashboard"):
             if req.path.startswith("/s/"):     # les aperçus web s'authentifient par le jeton dans l'URL
                 parts = req.path.split("/", 3)
-                authed = authed or (len(parts) > 2 and hmac.compare_digest(
-                    unquote(parts[2]).encode("utf-8", "replace"), config.TOKEN.encode()))
+                authed = authed or (len(parts) > 2 and config.token_ok(unquote(parts[2])))
             if authed:
                 action = classify(req.path, parse_qs(req.query))
                 if action:
@@ -152,8 +149,8 @@ class BaseHandler(BaseHTTPRequestHandler):
             c.load(self.headers.get("Cookie", ""))
         except Exception:
             return False
-        m = c.get("fl_auth")
-        return bool(m) and hmac.compare_digest(m.value.encode("utf-8", "replace"), config.TOKEN.encode())
+        m = c.get(config.AUTH_COOKIE)
+        return bool(m) and config.token_ok(m.value)
 
     def page_locked(self):
         html = message_page(
@@ -164,7 +161,7 @@ class BaseHandler(BaseHTTPRequestHandler):
 
     def files_locked(self):
         """Vrai si un mot de passe est configuré et que cette session n'est pas déverrouillée."""
-        return bool(config.PASSWORD) and "files" not in unlock_scopes(self.dash_session_id())
+        return bool(config.PASSWORD) and "files" not in config.unlock_scopes(self.dash_session_id())
 
     def dash_session_id(self):
         c = SimpleCookie()
@@ -172,5 +169,5 @@ class BaseHandler(BaseHTTPRequestHandler):
             c.load(self.headers.get("Cookie", ""))
         except Exception:
             return ""
-        m = c.get("fl_unlock")
+        m = c.get(config.UNLOCK_COOKIE)
         return m.value if m else ""

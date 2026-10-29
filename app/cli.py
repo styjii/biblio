@@ -1,33 +1,17 @@
 """Ligne de commande : lecture des options, configuration, démarrage du serveur HTTP."""
 
 import argparse
-import hashlib
-import os
 import signal
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from app import config
-from app.config import BUNDLE, FFMPEG, HERE
+from app.config import BUNDLE, FFMPEG
 from app.devices import (LOCAL_IPS, blocked_count, handle_sigterm, history_flusher, load_blocklist, load_history,
                          save_history)
-from app.envfile import conf, load_token, read_env
 from app.handler import FileHandler
-from app.sysinfo import parse_disks
 from app.utils import fmt_size, lan_ips
-
-
-def find_pdfjs(cli):
-    candidates = [cli] if cli else []
-    if os.environ.get("BIBLIO_PDFJS"):
-        candidates.append(os.environ["BIBLIO_PDFJS"])
-    candidates += [str(HERE), "/opt/pdf-library"]
-    for c in candidates:
-        d = Path(c).expanduser().resolve()
-        if (d / "legacy" / "web" / "viewer.html").is_file():
-            return d
-    return None
 
 
 def main():
@@ -40,29 +24,15 @@ def main():
     parser.add_argument("-j", "--pdfjs", help="dossier contenant legacy/web/viewer.html (pdf.js)")
     args = parser.parse_args()
 
-    config.ROOT = Path(args.dossier).expanduser().resolve()
-    config.PORT = args.port
-    config.READONLY = args.readonly
-    if not config.ROOT.is_dir():
-        parser.error(f"dossier introuvable : {config.ROOT}")
-    config.ENV_PATH = Path(args.env or os.environ.get("BIBLIO_ENV") or HERE / ".env").expanduser().resolve()
-    config.ENV.update(read_env(config.ENV_PATH))
-    config.PASSWORD = conf("BIBLIO_PASSWORD")
-    config.DASH_PASSWORD = conf("BIBLIO_DASHBOARD_PASSWORD") or config.PASSWORD
-    if conf("BIBLIO_DISKS"):
-        config.DISKS = parse_disks(conf("BIBLIO_DISKS"))
-    config.TOKEN = load_token()
-    try:
-        config.MAX_UPLOAD = max(0, int(conf("BIBLIO_MAX_UPLOAD_MB") or 4096)) * 1024 * 1024
-    except ValueError:
-        print("Attention : BIBLIO_MAX_UPLOAD_MB invalide, valeur par défaut (4096 Mo) utilisée.")
-    config.ROOT_ID = hashlib.sha1(str(config.ROOT).encode()).hexdigest()[:8]
+    root = Path(args.dossier).expanduser().resolve()
+    if not root.is_dir():
+        parser.error(f"dossier introuvable : {root}")
+    config.load(root, args.port, args.readonly, args.env, args.pdfjs)
     LOCAL_IPS.update(lan_ips())
     load_blocklist()
     load_history()
     threading.Thread(target=history_flusher, daemon=True).start()
     signal.signal(signal.SIGTERM, handle_sigterm)
-    config.PDFJS_DIR = find_pdfjs(args.pdfjs)
 
     print(f"Bibliothèque : {config.ROOT}" + ("  (lecture seule)" if config.READONLY else ""))
     print(f"Configuration : {config.ENV_PATH}")
@@ -77,11 +47,8 @@ def main():
         print(f"Tableau de bord : activé (/dashboard), {blocked_count()} appareil(s) bloqué(s).")
     else:
         print("Tableau de bord : désactivé (définis BIBLIO_DASHBOARD_PASSWORD ou BIBLIO_PASSWORD dans le .env).")
-    try:
-        if config.ENV_PATH.stat().st_mode & 0o077:
-            print(f"Attention : {config.ENV_PATH.name} est lisible par d'autres utilisateurs (chmod 600 recommandé).")
-    except OSError:
-        pass
+    if config.env_permissions_warning():
+        print(config.env_permissions_warning())
     if not BUNDLE.is_file():
         print(f"Attention : {BUNDLE.name} introuvable à côté de server.py, la lecture et l'édition de texte ne fonctionneront pas.")
     if not FFMPEG:

@@ -1,39 +1,11 @@
 """Accès au dossier servi : chemins sûrs, listage, lecture de texte, type des fichiers."""
 
 import mimetypes
-import os
-from pathlib import Path
 
 from app import config
 from app.config import MAX_TEXT
 from app.filetypes import AUDIO_EXT, BINARY_EXT, CODE_EXT, EXTRA_MIME, IMAGE_EXT, TEXT_EXT, VIDEO_EXT, WEB_EXT
 from app.utils import natural_key
-
-
-def resolve_inside(rel):
-    """Chemin *logique* sous ROOT : les liens symboliques ne sont pas résolus, de sorte
-    qu'un raccourci vers un dossier se comporte comme un vrai dossier (même hors de ROOT).
-    Seuls les « .. » et les chemins absolus sont neutralisés, de façon purement lexicale."""
-    if "\x00" in rel:
-        return None
-    p = Path(os.path.normpath(config.ROOT / rel))
-    try:
-        p.relative_to(config.ROOT)
-    except ValueError:
-        return None
-    if is_env_file(p):
-        return None
-    return p
-
-
-def is_env_file(p):
-    """Vrai si p est le .env (ou un lien vers lui) : il contient le jeton et le mot de passe."""
-    if config.ENV_PATH is None:
-        return False
-    try:
-        return p.samefile(config.ENV_PATH)
-    except OSError:
-        return False
 
 
 def rel_of(p):
@@ -71,7 +43,7 @@ def list_dir(current):
     except (PermissionError, OSError):
         return None, None
     folders = [p for p in entries if p.is_dir()]  # is_dir() suit les liens symboliques
-    files = [p for p in entries if p.is_file() and not is_env_file(p)]
+    files = [p for p in entries if p.is_file() and not config.is_env_file(p)]
     return folders, files
 
 
@@ -114,16 +86,3 @@ def guess_mime(p):
         if "charset" not in mime:
             mime += "; charset=utf-8" if mime.startswith("text/") or mime == "application/json" else ""
     return mime
-
-
-def clean_upload_name(name):
-    """Nom relatif envoyé par le navigateur (« dossier/sous/fichier.ext ») -> composants sûrs, ou None."""
-    if not name or len(name) > 1024 or name.startswith("/"):
-        return None
-    parts = name.split("/")
-    for c in parts:
-        if c in ("", ".", "..") or "\\" in c or len(c.encode("utf-8", "replace")) > 200:
-            return None
-        if any(ord(ch) < 32 or ord(ch) == 127 for ch in c):
-            return None
-    return parts

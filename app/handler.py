@@ -1,6 +1,5 @@
 """Gestionnaire HTTP : assemble les routes et répartit les requêtes GET / POST."""
 
-import hmac
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from app import config
@@ -35,13 +34,13 @@ class FileHandler(BaseHandler, BrowseRoutes, ViewerRoutes, PlayerRoutes, ServeRo
                 return self.route_site(path)
 
             tok = arg("token")
-            if tok and hmac.compare_digest(tok.encode("utf-8", "replace"), config.TOKEN.encode()):
+            if config.token_ok(tok):
                 rest = {k: v for k, v in q.items() if k != "token"}
                 loc = "/" + path.lstrip("/") + ("?" + urlencode(rest, doseq=True) if rest else "")
                 self.send_response(302)
                 self.send_header("Location", loc)
                 self.send_header("Set-Cookie",
-                                 f"fl_auth={config.TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000")
+                                 f"{config.AUTH_COOKIE}={config.TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000")
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return

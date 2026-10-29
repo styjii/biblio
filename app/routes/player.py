@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 from app import config
 from app.assets import DECORATE_JS, LISTEN_CSS, LISTEN_JS, THEME_JS, WATCH_JS
-from app.filesystem import guess_mime, kind_of, list_dir, rel_of, resolve_inside
+from app.filesystem import guess_mime, kind_of, list_dir, rel_of
 from app.icons import icon
 from app.media import (LANGS, SUB_TYPES, audio_info, cover_for, duration_of, ffmpeg_semaphore, find_subtitles,
                        has_cover, srt_to_vtt, thumb_for)
@@ -17,7 +17,7 @@ from app.views.layout import EDIT_LOCKED_HINT, doc_close, doc_open, folder_url, 
 
 class PlayerRoutes:
     def page_watch(self, rel):
-        p = resolve_inside(rel)
+        p = config.resolve_inside(rel)
         if p is None or not p.is_file() or kind_of(p) != "video":
             self.send_error(404, "Vidéo introuvable")
             return
@@ -71,7 +71,7 @@ class PlayerRoutes:
                        + doc_close(f"window.WCFG = {js_json(cfg)}; {THEME_JS}{DECORATE_JS}{WATCH_JS}"))
 
     def page_listen(self, rel):
-        p = resolve_inside(rel)
+        p = config.resolve_inside(rel)
         if p is None or not p.is_file() or kind_of(p) != "audio":
             self.send_error(404, "Fichier audio introuvable")
             return
@@ -97,7 +97,7 @@ class PlayerRoutes:
             + doc_close(f"window.LCFG = {js_json(cfg)}; window.LICO = {js_json(lico)}; {THEME_JS}{LISTEN_JS}"))
 
     def serve_thumb(self, rel):
-        p = resolve_inside(rel)
+        p = config.resolve_inside(rel)
         t = thumb_for(p) if p and p.is_file() and kind_of(p) == "video" else None
         if t is None:
             self.send_error(404)
@@ -105,7 +105,7 @@ class PlayerRoutes:
         self.send_bytes(t.read_bytes(), "image/jpeg", 200, {"Cache-Control": "private, max-age=86400"})
 
     def serve_meta(self, rel):
-        p = resolve_inside(rel)
+        p = config.resolve_inside(rel)
         kind = kind_of(p) if p is not None and p.is_file() else None
         if kind not in ("video", "audio"):
             self.send_error(404)
@@ -121,7 +121,7 @@ class PlayerRoutes:
         self.send_json({"duration": dur})
 
     def serve_cover(self, rel):
-        p = resolve_inside(rel)
+        p = config.resolve_inside(rel)
         c = cover_for(p) if p is not None and p.is_file() and kind_of(p) == "audio" else None
         if c is None:
             self.send_error(404)
@@ -130,7 +130,7 @@ class PlayerRoutes:
         self.send_file(c, ctype, None, {"Cache-Control": "private, max-age=86400"})
 
     def serve_sub(self, rel):
-        p = resolve_inside(rel)
+        p = config.resolve_inside(rel)
         if not p or not p.is_file() or p.suffix.lower() not in SUB_TYPES:
             self.send_error(404)
             return

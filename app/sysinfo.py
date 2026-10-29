@@ -40,16 +40,6 @@ def read_memory():
             "total_h": fmt_size(total), "used_h": fmt_size(used), "free_h": fmt_size(avail)}
 
 
-def parse_disks(text):
-    disks = []
-    for item in text.split(";"):
-        path, _, label = item.partition("=")
-        path = path.strip()
-        if path:
-            disks.append((path, label.strip() or path))
-    return disks
-
-
 def read_disks():
     """Capacité de chaque volume configuré (octets), ou un message d'erreur s'il est illisible."""
     out = []

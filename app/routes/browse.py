@@ -5,9 +5,8 @@ from urllib.parse import quote
 
 from app import config
 from app.assets import BROWSE_JS, DECORATE_JS, THEME_JS
-from app.filesystem import card_kind, list_dir, rel_of, resolve_inside
+from app.filesystem import card_kind, list_dir, rel_of
 from app.icons import ICONS, icon
-from app.security import unlock_scopes
 from app.templating import render
 from app.utils import js_json
 from app.views.cards import GROUPS, file_card, group_of, video_card
@@ -16,7 +15,7 @@ from app.views.layout import doc_close, doc_open, lock_script, topbar
 
 class BrowseRoutes:
     def page_browse(self, folder):
-        current = resolve_inside(folder)
+        current = config.resolve_inside(folder)
         if current is None:
             self.send_error(403, "Dossier non autorisé")
             return
@@ -89,7 +88,7 @@ class BrowseRoutes:
         parts = [page, render("browse/sheet")]
 
         cfg = {"readonly": config.READONLY, "canDelete": bool(config.PASSWORD) and not config.READONLY,
-               "unlocked": "files" in unlock_scopes(self.dash_session_id()), "protect": bool(config.PASSWORD),
+               "unlocked": "files" in config.unlock_scopes(self.dash_session_id()), "protect": bool(config.PASSWORD),
                "maxUpload": config.MAX_UPLOAD, "folder": relative.as_posix() if relative.parts else ""}
         icons_js = {n: icon(n, 22) for n in ICONS}
         parts.append(doc_close(f"window.FLCFG = {js_json(cfg)}; window.ICO = {js_json(icons_js)};"

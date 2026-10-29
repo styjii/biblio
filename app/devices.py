@@ -8,18 +8,15 @@ import os
 import threading
 import time
 from collections import deque
-from pathlib import Path
 from urllib.parse import unquote
 
-from app.filesystem import kind_of, resolve_inside
+from app import config
+from app.filesystem import kind_of
 from app.filetypes import MD_EXT
 from app.utils import lan_ips
 
 DEVICE_ACTIVE_SECONDS = 5 * 60     # un appareil est « connecté » s'il a fait une requête depuis moins de 5 min
 MAX_DEVICES = 500                  # appareils gardés en mémoire (les plus anciens sont oubliés)
-
-BLOCKLIST_PATH = (Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-                  / "biblio" / "blocked_devices.json")
 
 LOCAL_IPS = {"127.0.0.1"}          # adresses de la machine qui héberge le serveur (remplie au démarrage)
 _dev_lock = threading.Lock()
@@ -71,7 +68,7 @@ def is_blocked(ip):
 
 def load_blocklist():
     try:
-        data = json.loads(BLOCKLIST_PATH.read_text(encoding="utf-8"))
+        data = json.loads(config.BLOCKLIST_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return
     if not isinstance(data, list):
@@ -87,12 +84,12 @@ def load_blocklist():
 def save_blocklist():
     """Écrit la liste des appareils bloqués (atomique, droits 0600). À appeler avec _dev_lock tenu."""
     data = [{"ip": ip, "since": since} for ip, since in sorted(_blocked.items())]
-    BLOCKLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = BLOCKLIST_PATH.with_name(BLOCKLIST_PATH.name + ".tmp")
+    config.BLOCKLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = config.BLOCKLIST_PATH.with_name(config.BLOCKLIST_PATH.name + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(data, f)
-    os.replace(tmp, BLOCKLIST_PATH)
+    os.replace(tmp, config.BLOCKLIST_PATH)
 
 
 def set_blocked(ip_text, block, requester):
@@ -180,7 +177,6 @@ ACTIVITY_GAP = {"video": 300, "audio": 300}   # secondes sans requête avant de 
 DEFAULT_GAP = 90
 HISTORY_DAYS = 30                  # durée de conservation
 HISTORY_MAX = 3000                 # actions gardées par appareil
-HISTORY_PATH = BLOCKLIST_PATH.with_name("history.json")
 HISTORY_RANGES = {"24h": (24 * 3600, 900), "7d": (7 * 24 * 3600, 3600), "30d": (30 * 24 * 3600, 6 * 3600)}
 _history = {}                      # ip -> deque de [début, fin, catégorie, fichier, octets, requêtes]
 _hist_dirty = False
@@ -205,13 +201,13 @@ def classify(path, q):
     if path == "/pdf":
         return "pdf", arg("f")
     if path == "/preview":
-        pf = resolve_inside(arg("f"))
+        pf = config.resolve_inside(arg("f"))
         return ("text" if pf is not None and pf.suffix.lower() in MD_EXT else "web"), arg("f")
     if path == "/raw":
         f = arg("f")
         if arg("dl") == "1":
             return "download", f
-        p = resolve_inside(f)
+        p = config.resolve_inside(f)
         return KIND_CATS.get(kind_of(p) if p else "text", "text"), f
     if path.startswith("/docs/"):
         return "pdf", unquote(path[len("/docs/"):])
@@ -277,19 +273,19 @@ def save_history():
                 "history": {ip: [list(e) for e in h] for ip, h in _history.items()}}
         _hist_dirty = False
     try:
-        HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-        tmp = HISTORY_PATH.with_name(HISTORY_PATH.name + ".tmp")
+        config.HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = config.HISTORY_PATH.with_name(config.HISTORY_PATH.name + ".tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, separators=(",", ":"))
-        os.replace(tmp, HISTORY_PATH)
+        os.replace(tmp, config.HISTORY_PATH)
     except OSError:
         _hist_dirty = True      # nouvel essai au prochain passage
 
 
 def load_history():
     try:
-        data = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+        data = json.loads(config.HISTORY_PATH.read_text(encoding="utf-8"))
         devices, history = data.get("devices", {}), data.get("history", {})
     except (OSError, ValueError, AttributeError):
         return
