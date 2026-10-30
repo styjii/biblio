@@ -26,7 +26,9 @@
   v.addEventListener('ended', function(){
     try { localStorage.removeItem(posKey); } catch(e) {}
     if (repeat === 'one') { v.currentTime = 0; play(); return; }     // (repli : la boucle native s'en charge déjà)
-    if (auto.checked) next(true);
+    if (!auto.checked) return;
+    if (window.Transfers && window.Transfers.busy()) { say('Lecture automatique suspendue : un envoi est en cours dans cet onglet.'); return; }
+    next(true);
   });
 
   var cur = document.querySelector('.row.cur');

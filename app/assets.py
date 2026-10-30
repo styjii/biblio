@@ -7,6 +7,7 @@ plus pour le navigateur.
 """
 
 import gzip
+import hashlib
 
 from app import config
 
@@ -28,6 +29,12 @@ LOCK_JS = asset("js/lock.js")
 
 # Feuille de style commune
 CSS = asset("css/main")
+
+# Envois de fichiers : le moteur (aussi servi seul, en repli), le SharedWorker (moteur + glue) et le panneau commun
+TRANSFER_ENGINE_JS = asset("js/transfers/engine.js")
+TRANSFER_WORKER_JS = TRANSFER_ENGINE_JS + asset("js/transfers/worker.js")
+TRANSFER_UI_JS = asset("js/transfers/ui.js")
+TRANSFER_VERSION = hashlib.sha1(TRANSFER_WORKER_JS.encode("utf-8")).hexdigest()[:10]   # change avec le code : un worker périmé n'est pas réutilisé
 
 # Pages
 BROWSE_JS = asset("js/browse")

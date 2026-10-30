@@ -4,7 +4,7 @@ from html import escape
 from urllib.parse import quote
 
 from app import config
-from app.assets import CSS, LOCK_JS, THEME_INIT, THEME_JS
+from app.assets import CSS, LOCK_JS, THEME_INIT, THEME_JS, TRANSFER_UI_JS, TRANSFER_VERSION
 from app.icons import FAVICON, icon
 from app.templating import render
 from app.utils import js_json
@@ -20,9 +20,17 @@ def doc_open(title, body_class="", extra_css=""):
                   css=CSS, extra_css=extra_css, body_class=body_class)
 
 
+def transfer_script():
+    """Panneau des envois (SharedWorker) : chargé sur toutes les pages tant que l'envoi de fichiers n'est pas désactivé."""
+    if config.READONLY:
+        return ""
+    ico = {name: icon(name, size) for name, size in (("upload", 16), ("minus", 16), ("check", 14))}
+    return f"window.TCFG = {js_json({'v': TRANSFER_VERSION, 'ico': ico})};{TRANSFER_UI_JS}\n"
+
+
 def doc_close(script, before="", after=""):
     """Fin de page : script en ligne (+ balises avant / après) puis fermeture de <body>."""
-    return render("layout/document_end", script=script, before=before, after=after)
+    return render("layout/document_end", script=transfer_script() + script, before=before, after=after)
 
 
 def topbar(with_search, lock=False):

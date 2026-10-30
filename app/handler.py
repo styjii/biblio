@@ -3,6 +3,7 @@
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from app import config
+from app.assets import TRANSFER_ENGINE_JS, TRANSFER_WORKER_JS
 from app.routes.auth import AuthRoutes
 from app.routes.browse import BrowseRoutes
 from app.routes.dashboard import DashboardRoutes
@@ -59,6 +60,10 @@ class FileHandler(BrowseRoutes, ViewerRoutes, PlayerRoutes, ServeRoutes, EditRou
                 self.route_raw(arg("f"), arg("dl") == "1")
             elif path == "/static/editor.js":
                 self.route_bundle()
+            elif path == "/static/upload-worker.js":
+                self.route_script(TRANSFER_WORKER_JS)
+            elif path == "/static/transfer-engine.js":
+                self.route_script(TRANSFER_ENGINE_JS)
             elif path == "/lock-state":
                 self.route_lock_state()
             elif path == "/watch":

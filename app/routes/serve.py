@@ -130,6 +130,10 @@ class ServeRoutes(BaseHandler):
         else:
             self.send_bytes(b["raw"], "text/javascript; charset=utf-8", 200, headers)
 
+    def route_script(self, source):
+        """Script du front-end servi à part (worker d'envoi, moteur de repli) ; l'URL porte la version du code."""
+        self.send_bytes(source.encode("utf-8"), "text/javascript; charset=utf-8", 200, {"Cache-Control": "no-cache"})
+
     def route_pdf(self, rel):
         p = config.paths.resolve(rel)
         if p is None or not p.is_file() or p.suffix.lower() != ".pdf":

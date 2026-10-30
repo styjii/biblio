@@ -209,6 +209,32 @@ class ServerTests(unittest.TestCase):
             for name in ("clip-a.mp4", "clip-b.mp4", "clip-c.mp4"):
                 (lib / name).unlink()
 
+    def test_worker_d_envoi_et_panneau_sur_les_pages(self):
+        # scripts du worker : protégés par le jeton, servis en JavaScript, versionnés par l'URL
+        self.assertEqual(self.fetch("GET", "/static/upload-worker.js")[0], 401)
+        status, r, body = self.fetch("GET", "/static/upload-worker.js?v=x", cookie=self.cookie)
+        self.assertEqual(status, 200)
+        self.assertIn("javascript", r.getheader("Content-Type", ""))
+        self.assertIn("function TransferEngine", body)         # moteur
+        self.assertIn("onconnect", body)                       # glue du SharedWorker
+        status, r, body = self.fetch("GET", "/static/transfer-engine.js", cookie=self.cookie)
+        self.assertEqual(status, 200)
+        self.assertIn("function TransferEngine", body)
+        self.assertNotIn("onconnect", body)                    # le moteur de repli ne contient pas le worker
+        # le panneau est présent sur toutes les pages, pas seulement dans la navigation
+        for path in ("/", "/view?f=notes.txt"):
+            status, page = self.get(path)
+            self.assertEqual(status, 200, path)
+            self.assertIn("window.TCFG", page, path)
+            self.assertIn("window.Transfers", page, path)
+            # les pages déjà ouvertes affichent aussi un envoi démarré ailleurs (signal « storage », relais entre onglets)
+            self.assertIn("addEventListener('storage'", page, path)
+            self.assertIn("BroadcastChannel", page, path)
+        # l'ancien panneau de progression de la feuille « Envoyer » n'existe plus
+        _, home = self.get("/")
+        self.assertNotIn("id='uprun'", home)
+        self.assertNotIn("id='up-tab'", home)
+
 
 if __name__ == "__main__":
     unittest.main()

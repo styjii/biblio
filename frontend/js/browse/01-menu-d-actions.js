@@ -23,18 +23,11 @@
   var wrap = document.getElementById('sheet');
   var bodyEl = document.getElementById('sh-body');
 
-  var upRunning = false, upDirty = false, upMin = false, upMinimize = null;
   function closeSheet(){
-    var upShown = !document.getElementById('updlg').hidden;
-    // Envoi en cours : fermer la feuille d'envoi la masque (l'envoi continue) au lieu de ne rien faire.
-    if (upRunning && upShown && upMinimize) { upMinimize(); return; }
-    var reload = upDirty && upShown && !upRunning;
-    if (upShown) { upMin = false; document.getElementById('up-tab').hidden = true; }
     wrap.hidden = true; document.getElementById('newdlg').hidden = true; document.getElementById('deldlg').hidden = true;
     document.getElementById('rendlg').hidden = true; document.getElementById('edtdlg').hidden = true;
     document.getElementById('mkdlg').hidden = true;
     document.getElementById('updlg').hidden = true; bodyEl.innerHTML = '';
-    if (reload) location.reload();
   }
   // Feuille ouverte : la page derrière ne défile plus (la molette / le doigt ne font défiler que le menu).
   function lockScroll(){

@@ -31,7 +31,11 @@
     }
     rebuild(); saveOrder(-1);
   }
-  function go(k){ saveOrder(k); location.href = items[k].u; }
+  function go(k){
+    saveOrder(k);
+    if (window.Transfers) window.Transfers.open(items[k].u);     // pendant un envoi, nouvel onglet : l'envoi n'est pas interrompu
+    else location.href = items[k].u;
+  }
   function wrap(){
     // fin de liste : on repart du début ; en aléatoire, nouvelle série dont la vidéo qui vient de finir passe en dernier
     rebuild();

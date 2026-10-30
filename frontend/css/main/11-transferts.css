@@ -1,0 +1,17 @@
+/* ---------- Panneau des envois (toutes les pages) ---------- */
+.trpanel{
+  position:fixed; right:14px; bottom:calc(14px + env(safe-area-inset-bottom)); z-index:60; width:min(400px,calc(100vw - 28px));
+  display:flex; flex-direction:column; gap:10px; padding:14px; border-radius:18px;
+  background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow);
+}
+.trpanel[hidden],.uptab[hidden]{display:none}
+.trhead{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
+.trtitle{display:flex; flex-direction:column; min-width:0}
+.trtitle b{font-size:15px}
+.trpanel .uplist{max-height:30vh}
+.trnote{margin:0; font-size:12.5px}
+.trfoot{display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end}
+.trfoot .pill{justify-content:center}
+.tricon{display:inline-grid} .tricon svg{width:16px; height:16px}
+#tr-tab{z-index:60}
+@media(max-width:560px){.trpanel{left:14px; right:14px; width:auto}}
