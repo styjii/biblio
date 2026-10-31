@@ -34,6 +34,7 @@ CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "biblio
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "biblio"
 BLOCKLIST_PATH = CONFIG_DIR / "blocked_devices.json"   # appareils bloqués (tableau de bord)
 HISTORY_PATH = CONFIG_DIR / "history.json"             # historique d'activité (tableau de bord)
+PLAYBACK_PATH = CONFIG_DIR / "playback.json"           # dernière position de lecture de chaque appareil
 
 # =====================================================================================================
 # Renseignés au démarrage par load()

@@ -11,6 +11,8 @@
       if (k !== idx) return;
       applyTitle(j); setCover(j, k); showDur(k, j && j.duration);
     });
+    savePos(true);                                  // piste quittée : sa position est mémorisée avant de charger la suivante
+    curRel = t.f;
     a.src = '/raw?f=' + t.q;
     a.defaultPlaybackRate = rate; a.playbackRate = rate;
     say('');

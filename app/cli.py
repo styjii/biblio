@@ -8,6 +8,7 @@ from pathlib import Path
 from app import config
 from app.devices import monitor
 from app.handler import FileHandler
+from app.playback import playback
 from app.utils import fmt_size, lan_ips
 
 
@@ -80,6 +81,7 @@ class Application:
     def run(self):
         self.configure()
         monitor.start()
+        playback.start()
         signal.signal(signal.SIGTERM, self._on_sigterm)
         self.print_status()
         self.server = ThreadingHTTPServer(("0.0.0.0", config.PORT), FileHandler)
@@ -90,6 +92,7 @@ class Application:
             print("\nArrêt.")
         finally:
             monitor.stop()
+            playback.stop()
 
 
 def main():

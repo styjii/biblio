@@ -9,16 +9,17 @@ from app.routes.browse import BrowseRoutes
 from app.routes.dashboard import DashboardRoutes
 from app.routes.edit import EditRoutes
 from app.routes.player import PlayerRoutes
+from app.routes.progress import ProgressRoutes
 from app.routes.serve import ServeRoutes
 from app.routes.upload import UploadRoutes
 from app.routes.viewer import ViewerRoutes
 
-POSTS = ("/save", "/delete", "/rename", "/mkdir", "/upload-auth", "/upload", "/unlock", "/lock")
+POSTS = ("/save", "/delete", "/rename", "/mkdir", "/progress", "/upload-auth", "/upload", "/unlock", "/lock")
 DASH_POSTS = ("/dashboard/block", "/dashboard/unblock")
 
 
-class FileHandler(BrowseRoutes, ViewerRoutes, PlayerRoutes, ServeRoutes, EditRoutes, UploadRoutes, AuthRoutes,
-                  DashboardRoutes):
+class FileHandler(BrowseRoutes, ViewerRoutes, PlayerRoutes, ProgressRoutes, ServeRoutes, EditRoutes, UploadRoutes,
+                  AuthRoutes, DashboardRoutes):
     """Un gestionnaire = une famille de routes par module de `app/routes/`. Chacune hérite du socle HTTP
     `BaseHandler` (send_html, send_json…), ce qui permet à l'éditeur de connaître ces méthodes."""
 
@@ -78,6 +79,8 @@ class FileHandler(BrowseRoutes, ViewerRoutes, PlayerRoutes, ServeRoutes, EditRou
                 self.serve_cover(arg("f"))
             elif path == "/sub":
                 self.serve_sub(arg("f"))
+            elif path == "/progress":
+                self.route_progress_get(arg("f"))
             elif path == "/pdf":
                 self.route_pdf(arg("f"))
             elif path == "/zip":
@@ -117,6 +120,8 @@ class FileHandler(BrowseRoutes, ViewerRoutes, PlayerRoutes, ServeRoutes, EditRou
                 self.route_delete(q)
             elif req.path == "/rename":
                 self.route_rename(q)
+            elif req.path == "/progress":
+                self.route_progress_save(q)
             elif req.path == "/mkdir":
                 self.route_mkdir(q)
             elif req.path == "/upload-auth":

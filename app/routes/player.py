@@ -4,7 +4,7 @@ from html import escape
 from urllib.parse import quote
 
 from app import config
-from app.assets import DECORATE_JS, LISTEN_CSS, LISTEN_JS, THEME_JS, WATCH_JS
+from app.assets import DECORATE_JS, LISTEN_CSS, LISTEN_JS, PROGRESS_JS, THEME_JS, WATCH_JS
 from app.filesystem import guess_mime, kind_of, list_dir, rel_of
 from app.icons import icon
 from app.media import MediaLibrary, media
@@ -63,7 +63,7 @@ class PlayerRoutes(BaseHandler):
         wico = {n: icon(n, 24) for n in ("repeat", "repeat1", "volume", "mute")}
         self.send_html(doc_open(f"{p.stem} — Ma bibliothèque") + topbar(False) + page
                        + doc_close(f"window.WCFG = {js_json(cfg)}; window.WICO = {js_json(wico)}; "
-                                   f"{THEME_JS}{DECORATE_JS}{WATCH_JS}"))
+                                   f"{THEME_JS}{DECORATE_JS}{PROGRESS_JS}{WATCH_JS}"))
 
     def page_listen(self, rel):
         p = config.paths.resolve(rel)
@@ -89,7 +89,7 @@ class PlayerRoutes(BaseHandler):
         self.send_html(
             doc_open(f"{p.stem} — Lecteur audio", "", LISTEN_CSS) + topbar(False)
             + render("player/listen", folder_href=folder_url(p.parent), folder_name=escape(folder_name))
-            + doc_close(f"window.LCFG = {js_json(cfg)}; window.LICO = {js_json(lico)}; {THEME_JS}{LISTEN_JS}"))
+            + doc_close(f"window.LCFG = {js_json(cfg)}; window.LICO = {js_json(lico)}; {THEME_JS}{PROGRESS_JS}{LISTEN_JS}"))
 
     def serve_thumb(self, rel):
         p = config.paths.resolve(rel)

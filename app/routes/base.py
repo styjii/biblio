@@ -22,7 +22,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.send_bytes_body(content, ctype, extra)
 
     # Ressources chargées par la page elle-même (vignettes, sous-titres, scripts…) : erreur brute, sans page HTML.
-    _PLAIN_ERROR_PREFIXES = ("/thumb", "/cover", "/meta", "/sub", "/static/", "/docs/", "/legacy/",
+    _PLAIN_ERROR_PREFIXES = ("/thumb", "/cover", "/meta", "/sub", "/progress", "/static/", "/docs/", "/legacy/",
                              "/build/", "/web/", "/dashboard/", "/s/")
 
     def send_error(self, code, message=None, explain=None):
@@ -124,7 +124,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             return False
         req = urlsplit(self.path)
         authed = self.has_cookie()
-        monitor.track(ip, self.headers.get("User-Agent", ""), authed, hit=not req.path.startswith("/dashboard/"))
+        monitor.track(ip, self.headers.get("User-Agent", ""), authed, hit=not req.path.startswith(("/dashboard/", "/progress")))
         self._entry = None
         if not req.path.startswith("/dashboard"):
             if req.path.startswith("/s/"):     # les aperçus web s'authentifient par le jeton dans l'URL

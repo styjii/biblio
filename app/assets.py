@@ -36,6 +36,9 @@ TRANSFER_WORKER_JS = TRANSFER_ENGINE_JS + asset("js/transfers/worker.js")
 TRANSFER_UI_JS = asset("js/transfers/ui.js")
 TRANSFER_VERSION = hashlib.sha1(TRANSFER_WORKER_JS.encode("utf-8")).hexdigest()[:10]   # change avec le code : un worker périmé n'est pas réutilisé
 
+# Mémoire de la position de lecture (serveur, par appareil), partagée par les lecteurs audio et vidéo
+PROGRESS_JS = asset("js/progress.js")
+
 # Pages
 BROWSE_JS = asset("js/browse")
 VIEWER_JS = asset("js/viewer.js")

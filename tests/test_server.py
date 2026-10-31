@@ -235,6 +235,43 @@ class ServerTests(unittest.TestCase):
         self.assertNotIn("id='uprun'", home)
         self.assertNotIn("id='up-tab'", home)
 
+    # ----- position de lecture mémorisée par appareil
+    def test_position_de_lecture_par_appareil(self):
+        lib = Path(self.tmp.name) / "lib"
+        (lib / "cours").mkdir(exist_ok=True)
+        (lib / "cours" / "epi.mp4").write_bytes(b"\x00" * 16)
+        (lib / "cours" / "note.txt").write_text("pas un média")
+        ck = self.unlocked_cookie()
+        try:
+            self.assertEqual(self.fetch("GET", "/progress?f=cours/epi.mp4")[0], 401)                   # protégé par le jeton
+            status, _, body = self.fetch("GET", "/progress?f=cours/epi.mp4", cookie=self.cookie)
+            self.assertEqual((status, json.loads(body)["t"]), (200, 0))                                 # rien de mémorisé
+            self.assertEqual(self.fetch("POST", "/progress?f=cours/epi.mp4&t=95.5&d=600", b"", None, self.cookie)[0], 403)   # sans l'en-tête XHR
+            status, _, body = self.fetch("POST", "/progress?f=cours/epi.mp4&t=95.5&d=600", b"", XHR, self.cookie)
+            self.assertEqual((status, json.loads(body)), (200, {"ok": True, "saved": True}))
+            status, _, body = self.fetch("GET", "/progress?f=cours/epi.mp4", cookie=self.cookie)
+            self.assertEqual(json.loads(body), {"ok": True, "t": 95.5, "d": 600.0})
+            self.assertEqual(self.fetch("POST", "/progress?f=cours/epi.mp4&t=abc&d=1", b"", XHR, self.cookie)[0], 400)
+            self.assertEqual(self.fetch("GET", "/progress?f=cours/note.txt", cookie=self.cookie)[0], 404)   # pas un média
+            self.assertEqual(self.fetch("GET", "/progress?f=../etc/passwd", cookie=self.cookie)[0], 403)
+            # une position proche du début (ou « fini ») efface la mémoire
+            self.fetch("POST", "/progress?f=cours/epi.mp4&t=1.2&d=600", b"", XHR, self.cookie)
+            _, _, body = self.fetch("GET", "/progress?f=cours/epi.mp4", cookie=self.cookie)
+            self.assertEqual(json.loads(body)["t"], 0)
+            # renommage : la position suit le fichier ; suppression : elle disparaît
+            self.fetch("POST", "/progress?f=cours/epi.mp4&t=300&d=600", b"", XHR, self.cookie)
+            self.assertEqual(self.fetch("POST", "/rename?f=cours/epi.mp4&to=epi2.mp4", b"", XHR, ck)[0], 200)
+            _, _, body = self.fetch("GET", "/progress?f=cours/epi2.mp4", cookie=self.cookie)
+            self.assertEqual(json.loads(body)["t"], 300.0)
+            self.assertEqual(self.fetch("POST", "/delete?f=cours/epi2.mp4", b"", XHR, ck)[0], 200)
+            (lib / "cours" / "epi2.mp4").write_bytes(b"\x00" * 16)             # même nom recréé : aucune position fantôme
+            _, _, body = self.fetch("GET", "/progress?f=cours/epi2.mp4", cookie=self.cookie)
+            self.assertEqual(json.loads(body)["t"], 0)
+        finally:
+            for name in ("epi.mp4", "epi2.mp4", "note.txt"):
+                (lib / "cours" / name).unlink(missing_ok=True)
+            (lib / "cours").rmdir()
+
 
 if __name__ == "__main__":
     unittest.main()

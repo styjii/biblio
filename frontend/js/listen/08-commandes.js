@@ -64,9 +64,8 @@
     };
     Object.keys(H).forEach(function(name){ try { navigator.mediaSession.setActionHandler(name, H[name]); } catch(e) {} });
   }
-  window.addEventListener('pagehide', function(){
-    try { if (a.duration && !a.ended && a.currentTime > 0) localStorage.setItem(posKey(), JSON.stringify({t: a.currentTime})); } catch(e) {}
-  });
+  window.addEventListener('pagehide', function(){ savePos(true); });
+  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'hidden') savePos(true); });
 
   buildList();
   rebuild();

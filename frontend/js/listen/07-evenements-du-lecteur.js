@@ -1,5 +1,29 @@
   /* ----- événements du lecteur ----- */
-  function posKey(){ return 'al:pos:' + cfg.key + ':' + T[idx].f; }
+  /* ----- reprise : dernière position de CET appareil pour la piste ouverte au chargement, mémorisée par le serveur ----- */
+  var legacyKey = 'al:pos:' + cfg.key + ':' + T[idx].f;      // ancien stockage dans le navigateur (repris une dernière fois)
+  var resumeIdx = idx, resume = null, fetched = false, curRel = T[idx].f;
+  function tryResume(){
+    if (!first || !fetched || !isFinite(a.duration) || a.duration <= 0) return;
+    first = false;                                         // à partir d'ici seulement, on peut enregistrer sans écraser la position mémorisée
+    if (idx === resumeIdx && resume && resume.t > 3 && resume.t < a.duration - 5 && a.currentTime < 3) {
+      a.currentTime = resume.t;
+      say('Reprise à ' + Progress.fmt(resume.t) + '.');
+    }
+  }
+  Progress.get(T[idx].f).then(function(r){
+    if (r && r.t > 0) resume = r;
+    else {
+      try { var old = JSON.parse(localStorage.getItem(legacyKey)); if (old && old.t > 3) resume = {t: old.t, d: 0}; } catch(e) {}
+    }
+    try { localStorage.removeItem(legacyKey); } catch(e) {}
+    fetched = true;
+    tryResume();
+  });
+  function savePos(final){
+    if (first || !curRel || !isFinite(a.duration) || a.duration <= 0 || a.ended) return;
+    if (a.currentTime > a.duration - 5) Progress.done(curRel);   // presque fini : on repartira du début
+    else Progress.save(curRel, a.currentTime, a.duration, final);
+  }
   function posState(){
     if ('mediaSession' in navigator && navigator.mediaSession.setPositionState && isFinite(a.duration)) {
       try { navigator.mediaSession.setPositionState({duration: a.duration, playbackRate: a.playbackRate, position: Math.min(a.currentTime, a.duration)}); } catch(e) {}
@@ -8,13 +32,7 @@
   a.addEventListener('loadedmetadata', function(){
     errRun = 0;
     showDur(idx, a.duration);
-    if (first) {
-      first = false;
-      try {
-        var s = JSON.parse(localStorage.getItem(posKey()));
-        if (s && s.t > 3 && s.t < a.duration - 5) a.currentTime = s.t;
-      } catch(e) {}
-    }
+    tryResume();
     renderSeek(); posState();
   });
   a.addEventListener('durationchange', renderSeek);
@@ -22,10 +40,7 @@
   a.addEventListener('timeupdate', function(){
     renderSeek();
     var now = Date.now();
-    if (now - lastSave > 2500 && a.duration && !a.ended) {
-      lastSave = now;
-      try { localStorage.setItem(posKey(), JSON.stringify({t: a.currentTime})); } catch(e) {}
-    }
+    if (now - lastSave > 5000) { lastSave = now; savePos(false); }
   });
   a.addEventListener('waiting', function(){ if (!a.paused) { loading = true; renderPlay(); } });
   a.addEventListener('canplay', function(){ loading = false; renderPlay(); });
@@ -34,10 +49,10 @@
   a.addEventListener('pause', function(){
     loading = false; renderPlay();
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
-    try { if (a.duration && !a.ended) localStorage.setItem(posKey(), JSON.stringify({t: a.currentTime})); } catch(e) {}
+    savePos(false);
   });
   a.addEventListener('ended', function(){
-    try { localStorage.removeItem(posKey()); } catch(e) {}
+    if (curRel) Progress.done(curRel);
     if (repeat === 'one') { a.currentTime = 0; play(); return; }
     next(true);
   });

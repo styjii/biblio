@@ -7,9 +7,10 @@ from pathlib import Path
 
 from app import config
 from app.config import MAX_SAVE
-from app.filesystem import is_binary_file
-from app.utils import fmt_size
+from app.filesystem import is_binary_file, rel_of
+from app.playback import playback
 from app.routes.base import BaseHandler
+from app.utils import fmt_size
 
 
 class EditRoutes(BaseHandler):
@@ -116,6 +117,7 @@ class EditRoutes(BaseHandler):
         except OSError as e:
             self.send_json({"ok": False, "error": e.strerror or "Suppression impossible"}, 500)
             return
+        playback.drop(rel_of(p))        # les positions de lecture mémorisées pour ce fichier (ou ce dossier) n'ont plus lieu d'être
         self.send_json({"ok": True})
 
     def route_rename(self, q):
@@ -158,6 +160,7 @@ class EditRoutes(BaseHandler):
         try:
             if new != p.name:
                 os.rename(p, target)
+                playback.move(rel_of(p), rel_of(target))      # les positions de lecture suivent le fichier renommé
         except OSError as e:
             self.send_json({"ok": False, "error": e.strerror or "Renommage impossible"}, 500)
             return
