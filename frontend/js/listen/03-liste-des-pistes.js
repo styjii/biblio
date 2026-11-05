@@ -1,44 +1,82 @@
-  /* ----- liste des pistes ----- */
-  function buildList(){
-    var box = $('l-list');
-    box.textContent = '';
-    var io = 'IntersectionObserver' in window ? new IntersectionObserver(function(es){
-      es.forEach(function(e){
-        if (!e.isIntersecting) return;
-        io.unobserve(e.target);
-        var i = +e.target.dataset.i;
-        getInfo(i).then(function(j){ showDur(i, j && j.duration); });
-      });
-    }, {root: box, rootMargin: '120px'}) : null;
-    T.forEach(function(t, i){
-      var b = document.createElement('button');
-      b.type = 'button'; b.className = 'ltrack'; b.dataset.i = i;
-      var num = document.createElement('span'); num.className = 'num';
-      var nn = document.createElement('span'); nn.className = 'n'; nn.textContent = i + 1;
-      var eq = document.createElement('span'); eq.className = 'eqi'; eq.innerHTML = I.eq || '';
-      num.appendChild(nn); num.appendChild(eq);
-      var tn = document.createElement('span'); tn.className = 'tn'; tn.textContent = t.n;
-      var td = document.createElement('span'); td.className = 'td';
-      var te = document.createElement('span'); te.className = 'te'; te.textContent = t.e;
-      b.appendChild(num); b.appendChild(tn); b.appendChild(td); b.appendChild(te);
-      b.addEventListener('click', function(){ playIndex(i); });
-      box.appendChild(b); rows.push(b);
-      if (io) io.observe(b);
-    });
-  }
-  function markCurrent(){
-    if (curRow) { curRow.classList.remove('cur', 'playing'); curRow.removeAttribute('aria-current'); }
-    curRow = rows[idx] || null;
-    if (curRow) { curRow.classList.add('cur'); curRow.setAttribute('aria-current', 'true'); }
-    renderPlayRow();
-  }
-  function renderPlayRow(){ if (curRow) curRow.classList.toggle('playing', !a.paused && !a.ended); }
-  // fait défiler la liste elle-même (jamais la page) pour montrer la piste courante
-  function reveal(){
-    var box = $('l-list'), r = rows[idx];
-    if (!box || !r) return;
-    window.requestAnimationFrame(function(){
-      box.scrollTop = Math.max(0, r.offsetTop - (box.clientHeight - r.offsetHeight) / 2);
-    });
-  }
 
+  /** La liste des pistes : lignes cliquables, piste courante, durées chargées à mesure qu'on les voit, filtre. */
+  class TrackList {
+    #box = $('l-list');
+    #rows = [];
+    #current = null;
+    #info;
+
+    constructor(info, onSelect) {
+      this.#info = info;
+      this.#build(onSelect);
+      $('l-filter').addEventListener('input', () => this.applyFilter());
+    }
+
+    #build(onSelect) {
+      const observer = 'IntersectionObserver' in window
+        ? new IntersectionObserver((entries) => {
+          for (const {isIntersecting, target} of entries) {
+            if (!isIntersecting) continue;
+            observer.unobserve(target);
+            this.#showDurationOf(Number(target.dataset.i));
+          }
+        }, {root: this.#box, rootMargin: '120px'})
+        : null;
+      const part = (tag, className, text = '') => Object.assign(document.createElement(tag), {className, textContent: text});
+
+      this.#box.textContent = '';
+      tracks.forEach((track, i) => {
+        const row = part('button', 'ltrack');
+        row.type = 'button';
+        row.dataset.i = i;
+        const num = part('span', 'num');
+        const equalizer = part('span', 'eqi');
+        equalizer.innerHTML = icons.eq ?? '';
+        num.append(part('span', 'n', i + 1), equalizer);
+        row.append(num, part('span', 'tn', track.n), part('span', 'td'), part('span', 'te', track.e));
+        row.addEventListener('click', () => onSelect(i));
+        this.#box.appendChild(row);
+        this.#rows.push(row);
+        observer?.observe(row);
+      });
+    }
+
+    async #showDurationOf(index) {
+      const meta = await this.#info.get(index);
+      this.showDuration(index, meta?.duration);
+    }
+
+    showDuration(index, seconds) {
+      const cell = this.#rows[index]?.querySelector('.td');
+      if (cell && seconds) cell.textContent = formatTime(seconds);
+    }
+
+    /** Marque la piste en cours ; `playing` : elle est en lecture. */
+    markCurrent(index, playing) {
+      if (this.#current) {
+        this.#current.classList.remove('cur', 'playing');
+        this.#current.removeAttribute('aria-current');
+      }
+      this.#current = this.#rows[index] ?? null;
+      this.#current?.classList.add('cur');
+      this.#current?.setAttribute('aria-current', 'true');
+      this.setPlaying(playing);
+    }
+
+    setPlaying(playing) { this.#current?.classList.toggle('playing', playing); }
+    markBad(index) { this.#rows[index]?.classList.add('bad'); }
+
+    /** Fait défiler la liste elle-même (jamais la page) pour montrer la piste courante. */
+    reveal(index) {
+      const row = this.#rows[index];
+      if (!row) return;
+      requestAnimationFrame(() => {
+        this.#box.scrollTop = Math.max(0, row.offsetTop - (this.#box.clientHeight - row.offsetHeight) / 2);
+      });
+    }
+
+    applyFilter() {
+      const query = $('l-filter').value.trim().toLowerCase();
+      this.#rows.forEach((row, i) => { row.hidden = !!query && !tracks[i].n.toLowerCase().includes(query); });
+    }
+  }

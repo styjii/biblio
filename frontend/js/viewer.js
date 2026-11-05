@@ -1,129 +1,145 @@
-(function(){
-  var C = window.FLCFG;
-  function el(id){ return document.getElementById(id); }
-  function ls(k, v){ try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch(e) {} return null; }
+/* Visionneuse et éditeur de texte (CodeMirror + mode Vim, voir editor.bundle.js). */
+(() => {
+  const C = window.FLCFG;
+  const el = (id) => document.getElementById(id);
+  const pref = {
+    get(key) { try { return localStorage.getItem(key); } catch { return null; } },
+    set(key, value) { try { localStorage.setItem(key, value); } catch { /* préférence non mémorisée */ } },
+  };
+  const showPosition = ({line, col, lines}) => {
+    el('st-pos').textContent = `${line}:${col}`;
+    el('st-lines').textContent = `${lines} lignes`;
+  };
 
-  var fs = parseInt(ls('fl:fs'), 10) || 15;
-  function applyFs(){ el('editor').style.setProperty('--fs', fs + 'px'); ls('fl:fs', String(fs)); }
-  applyFs();
-  el('fs-down').addEventListener('click', function(){ fs = Math.max(10, fs - 1); applyFs(); });
-  el('fs-up').addEventListener('click', function(){ fs = Math.min(26, fs + 1); applyFs(); });
+  // taille du texte
+  let fontSize = parseInt(pref.get('fl:fs'), 10) || 15;
+  const applyFontSize = () => {
+    el('editor').style.setProperty('--fs', `${fontSize}px`);
+    pref.set('fl:fs', String(fontSize));
+  };
+  applyFontSize();
+  el('fs-down').addEventListener('click', () => { fontSize = Math.max(10, fontSize - 1); applyFontSize(); });
+  el('fs-up').addEventListener('click', () => { fontSize = Math.min(26, fontSize + 1); applyFontSize(); });
 
-  var wrapOn = ls('fl:wrap') !== '0';
-  var numOn = ls('fl:num') !== '0';
-  var ctrl = FL.create({
+  const wrapOn = pref.get('fl:wrap') !== '0';
+  const numbersOn = pref.get('fl:num') !== '0';
+  const ctrl = FL.create({
     parent: el('editor'), name: C.name, doc: C.doc, readOnly: C.readonlyView,
-    vim: C.vim !== false, wrap: wrapOn, numbers: numOn,
-    onChange: function(i){ el('st-pos').textContent = i.line + ':' + i.col; el('st-lines').textContent = i.lines + ' lignes'; },
-    onMode: function(m){ },
-    onSave: function(cb){ save(cb); },
-    onQuit: function(force){ quit(force); },
-    onMessage: function(t){ flash(t); }
+    vim: C.vim !== false, wrap: wrapOn, numbers: numbersOn,
+    onChange: showPosition,
+    onMode() {},
+    onSave: (cb) => save(cb),
+    onQuit: (force) => quit(force),
+    onMessage: (text) => flash(text),
   });
   el('st-lang').textContent = ctrl.label;
 
-  var msgTimer = null;
-  function flash(t){
-    var m = el('st-msg'); m.textContent = t;
-    clearTimeout(msgTimer); msgTimer = setTimeout(function(){ m.textContent = ''; }, 3500);
-  }
+  let messageTimer = null;
+  const flash = (text) => {
+    const box = el('st-msg');
+    box.textContent = text;
+    clearTimeout(messageTimer);
+    messageTimer = setTimeout(() => { box.textContent = ''; }, 3500);
+  };
+
+  /** Bouton à bascule dont l'état est mémorisé : `apply(état)` est appelé à chaque clic. */
+  const bindToggle = (id, key, initial, apply) => {
+    const button = el(id);
+    let on = initial;
+    button.classList.toggle('on', on);
+    button.addEventListener('click', () => {
+      on = !on;
+      pref.set(key, on ? '1' : '0');
+      button.classList.toggle('on', on);
+      apply(on);
+    });
+  };
+
+  bindToggle('wrap-btn', 'fl:wrap', wrapOn, (on) => ctrl.setWrap(on));
 
   if (C.mode === 'view') {
-    el('wrap-btn').classList.toggle('on', wrapOn);
-    el('wrap-btn').addEventListener('click', function(){
-      wrapOn = !wrapOn; ctrl.setWrap(wrapOn); ls('fl:wrap', wrapOn ? '1' : '0');
-      el('wrap-btn').classList.toggle('on', wrapOn);
-    });
-    el('find-btn').addEventListener('click', function(){ ctrl.search(); });
+    el('find-btn').addEventListener('click', () => ctrl.search());
     return;
   }
 
   // ------------------------------------------------ mode édition
-  var dirty = false, leaving = false;
-  var vimOn = ls('fl:vim') !== '0';
-  var keysOn = ls('fl:keys') === null ? matchMedia('(pointer:coarse)').matches : ls('fl:keys') === '1';
-  var keys = el('keys');
+  let leaving = false;
+  const keysPanel = el('keys');
+  const vimOn = pref.get('fl:vim') !== '0';
+  const keysOn = pref.get('fl:keys') === null ? matchMedia('(pointer:coarse)').matches : pref.get('fl:keys') === '1';
 
-  function setModeLabel(m, sub){
-    var b = el('st-mode');
-    var map = {normal:'NORMAL', insert:'INSERT', visual:'VISUAL', replace:'REMPLACER'};
-    var txt = map[m] || m.toUpperCase();
-    if (m === 'visual' && sub === 'linewise') txt = 'V-LIGNE';
-    if (m === 'visual' && sub === 'blockwise') txt = 'V-BLOC';
-    if (m === 'off') txt = 'TEXTE';
-    b.textContent = txt; b.dataset.m = m;
-  }
-  function syncVimUi(){
-    el('btn-vim').classList.toggle('on', vimOn);
-    keys.classList.toggle('novim', !vimOn);
-    if (!vimOn) setModeLabel('off');
-  }
+  const MODE_LABELS = {normal: 'NORMAL', insert: 'INSERT', visual: 'VISUAL', replace: 'REMPLACER'};
+  const setModeLabel = (mode, sub) => {
+    const box = el('st-mode');
+    let label = MODE_LABELS[mode] ?? mode.toUpperCase();
+    if (mode === 'visual' && sub === 'linewise') label = 'V-LIGNE';
+    if (mode === 'visual' && sub === 'blockwise') label = 'V-BLOC';
+    if (mode === 'off') label = 'TEXTE';
+    box.textContent = label;
+    box.dataset.m = mode;
+  };
+  const syncVimUi = (on) => {
+    keysPanel.classList.toggle('novim', !on);
+    if (!on) setModeLabel('off');
+  };
 
-  ctrl.opts.onChange = function(i){
-    dirty = i.dirty;
-    el('dirty').hidden = !i.dirty;
-    el('st-pos').textContent = i.line + ':' + i.col;
-    el('st-lines').textContent = i.lines + ' lignes';
+  ctrl.opts.onChange = (info) => {
+    el('dirty').hidden = !info.dirty;
+    showPosition(info);
   };
   ctrl.opts.onMode = setModeLabel;
   if (!vimOn) ctrl.setVim(false);
-  syncVimUi();
-  keys.hidden = !keysOn; el('btn-keys').classList.toggle('on', keysOn);
+  syncVimUi(vimOn);
+  keysPanel.hidden = !keysOn;
 
-  el('btn-vim').addEventListener('click', function(){
-    vimOn = !vimOn; ls('fl:vim', vimOn ? '1' : '0'); ctrl.setVim(vimOn); syncVimUi(); ctrl.focus();
-  });
-  el('btn-keys').addEventListener('click', function(){
-    keysOn = !keysOn; ls('fl:keys', keysOn ? '1' : '0'); keys.hidden = !keysOn;
-    el('btn-keys').classList.toggle('on', keysOn);
-  });
-  el('wrap-btn').classList.toggle('on', wrapOn);
-  el('wrap-btn').addEventListener('click', function(){
-    wrapOn = !wrapOn; ctrl.setWrap(wrapOn); ls('fl:wrap', wrapOn ? '1' : '0');
-    el('wrap-btn').classList.toggle('on', wrapOn);
-  });
-  el('num-btn').classList.toggle('on', numOn);
-  el('num-btn').addEventListener('click', function(){
-    numOn = !numOn; ctrl.setNumbers(numOn); ls('fl:num', numOn ? '1' : '0');
-    el('num-btn').classList.toggle('on', numOn);
+  bindToggle('btn-vim', 'fl:vim', vimOn, (on) => { ctrl.setVim(on); syncVimUi(on); ctrl.focus(); });
+  bindToggle('btn-keys', 'fl:keys', keysOn, (on) => { keysPanel.hidden = !on; });
+  bindToggle('num-btn', 'fl:num', numbersOn, (on) => ctrl.setNumbers(on));
+
+  keysPanel.addEventListener('pointerdown', (e) => e.preventDefault());       // les touches virtuelles ne volent pas le focus
+  keysPanel.addEventListener('click', (e) => {
+    const key = e.target.closest('[data-k]');
+    if (key) ctrl.send(key.dataset.k);
   });
 
-  keys.addEventListener('pointerdown', function(e){ e.preventDefault(); });
-  keys.addEventListener('click', function(e){
-    var b = e.target.closest('[data-k]');
-    if (b) ctrl.send(b.dataset.k);
-  });
-
-  function save(cb, force){
-    if (C.readonly) { flash('Mode lecture seule'); return; }
-    var url = '/save?f=' + C.q + '&mt=' + encodeURIComponent(C.mt) + '&enc=' + encodeURIComponent(C.enc) +
-      '&crlf=' + (C.crlf ? 1 : 0) + (force ? '&force=1' : '');
-    fetch(url, {
-      method: 'POST',
-      headers: {'X-Requested-With': 'biblio', 'Content-Type': 'text/plain; charset=utf-8'},
-      body: ctrl.getText()
-    }).then(function(r){ return r.json().then(function(j){ return {s: r.status, j: j}; }); })
-      .then(function(x){
-        if (x.s === 409 && !force) {
-          if (confirm('Le fichier a changé sur le disque depuis son ouverture. Écraser quand même ?')) save(cb, true);
-          else flash('Enregistrement annulé');
-          return;
-        }
-        if (!x.j.ok) { flash('Erreur : ' + (x.j.error || x.s)); return; }
-        C.mt = x.j.mtime; if (x.j.enc) C.enc = x.j.enc;
-        ctrl.markSaved(); flash('Enregistré · ' + x.j.lines + ' lignes');
-        if (cb) cb();
-      }).catch(function(){ flash('Échec réseau, rien n\u2019a été enregistré'); });
+  async function save(then, force = false) {
+    if (C.readonly) return flash('Mode lecture seule');
+    const url = `/save?f=${C.q}&mt=${encodeURIComponent(C.mt)}&enc=${encodeURIComponent(C.enc)}&crlf=${C.crlf ? 1 : 0}${force ? '&force=1' : ''}`;
+    let status, answer;
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: {'X-Requested-With': 'biblio', 'Content-Type': 'text/plain; charset=utf-8'},
+        body: ctrl.getText(),
+      });
+      status = r.status;
+      answer = await r.json();
+    } catch {
+      return flash('Échec réseau, rien n’a été enregistré');
+    }
+    if (status === 409 && !force) {
+      if (confirm('Le fichier a changé sur le disque depuis son ouverture. Écraser quand même ?')) return save(then, true);
+      return flash('Enregistrement annulé');
+    }
+    if (!answer.ok) return flash(`Erreur : ${answer.error || status}`);
+    C.mt = answer.mtime;
+    if (answer.enc) C.enc = answer.enc;
+    ctrl.markSaved();
+    flash(`Enregistré · ${answer.lines} lignes`);
+    then?.();
   }
-  function quit(force){
-    if (!force && ctrl.isDirty()) { flash('Modifications non enregistrées (:q! pour quitter quand même)'); return; }
-    leaving = true; location.href = C.back;
+
+  function quit(force) {
+    if (!force && ctrl.isDirty()) return flash('Modifications non enregistrées (:q! pour quitter quand même)');
+    leaving = true;
+    location.href = C.back;
   }
-  window.addEventListener('beforeunload', function(e){
+
+  window.addEventListener('beforeunload', (e) => {
     if (!leaving && ctrl.isDirty()) { e.preventDefault(); e.returnValue = ''; }
   });
-  el('btn-save').addEventListener('click', function(){ save(); });
-  document.addEventListener('keydown', function(e){
+  el('btn-save').addEventListener('click', () => save());
+  document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
   });
   ctrl.focus();

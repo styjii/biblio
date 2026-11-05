@@ -26,14 +26,14 @@ function makeEngine(respond, opts) {
   }
   const views = [];
   const ctx = {XMLHttpRequest: XHR, setTimeout, clearTimeout, Promise, encodeURIComponent, Date, JSON, Object, Math,
-    fetch: () => { calls.tickets++; return Promise.resolve({status: 200, json: () => Promise.resolve(opts.auth ? opts.auth(calls.tickets) : {ok: true, ticket: 't' + calls.tickets, ttl: 900})}); }};
+    fetch: () => { calls.tickets++; return Promise.resolve({status: 200, json: () => Promise.resolve(opts.auth ? opts.auth(calls.tickets) : {ok: true, ticket: `t${calls.tickets}`, ttl: 900})}); }};
   vm.createContext(ctx);
-  vm.runInContext(code + '\nthis.TransferEngine = TransferEngine;', ctx);
-  const engine = ctx.TransferEngine(v => views.push(v));
+  vm.runInContext(`${code}\nthis.TransferEngine = TransferEngine;`, ctx);
+  const engine = new ctx.TransferEngine(v => views.push(v));
   return {engine, calls, views};
 }
-const files = (n, size) => Array.from({length: n}, (_, i) => ({size: size || 10, name: 'f' + i}));
-const names = n => Array.from({length: n}, (_, i) => 'f' + i + '.bin');
+const files = (n, size) => Array.from({length: n}, (_, i) => ({size: size || 10, name: `f${i}`}));
+const names = n => Array.from({length: n}, (_, i) => `f${i}.bin`);
 async function waitDone(e, ms) { for (let i = 0; i < (ms || 400); i++) { if (!e.engine.view().running) return; await tick(); } }
 const out = {};
 

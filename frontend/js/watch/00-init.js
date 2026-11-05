@@ -1,32 +1,30 @@
-(function(){
-  var cfg = window.WCFG, I = window.WICO || {};
-  var items = cfg.items, n = items.length, idx = cfg.index;
-  var $ = function(id){ return document.getElementById(id); };
-  var v = $('player'), auto = $('autonext'), vslider = $('w-vol');
-  var posKey = 'vl:pos:' + cfg.key;
-  var shuffle = false, repeat = 'off', rates = [0.75, 1, 1.25, 1.5, 1.75, 2], rate = 1;
-  var order = [], pos = 0, msgT = 0;
-  function load(k, d){ try { var x = localStorage.getItem('vl:' + k); return x === null ? d : x; } catch(e) { return d; } }
-  function store(k, x){ try { localStorage.setItem('vl:' + k, x); } catch(e) {} }
+/* Lecteur vidéo : ordre de lecture, volume et vitesse, reprise de la position, boutons et clavier.
+   Les fichiers de ce dossier forment un seul script (concaténés dans l'ordre) : celui-ci ouvre la fonction, le dernier la ferme. */
+(() => {
+  const cfg = window.WCFG;
+  const {items, index} = cfg;                              // vidéos du dossier [{f: chemin, u: adresse}], position de la vidéo ouverte
+  const icons = window.WICO ?? {};
+  const $ = (id) => document.getElementById(id);
+  const video = $('player');
 
-  // préférences conservées d'une vidéo à l'autre
-  shuffle = load('shuffle', '0') === '1';
-  repeat = ['off', 'all', 'one'].indexOf(load('repeat', 'off')) >= 0 ? load('repeat', 'off') : 'off';
-  rate = parseFloat(load('rate', '1')); if (rates.indexOf(rate) < 0) rate = 1;
-  var vol = parseFloat(load('vol', '1')); if (!(vol >= 0 && vol <= 1)) vol = 1;
-  v.volume = vol; v.muted = load('muted', '0') === '1';
-  v.defaultPlaybackRate = rate; v.playbackRate = rate;
+  /** Préférences conservées d'une vidéo à l'autre (clés « vl:… »). */
+  const prefs = {
+    get(key, fallback) { try { return localStorage.getItem(`vl:${key}`) ?? fallback; } catch { return fallback; } },
+    set(key, value) { try { localStorage.setItem(`vl:${key}`, value); } catch { /* préférence non mémorisée */ } },
+  };
 
-  // message court sous les commandes (s'efface seul)
-  function say(t){
-    clearTimeout(msgT);
-    $('w-msg').textContent = t || '';
-    if (t) msgT = setTimeout(function(){ $('w-msg').textContent = ''; }, 4000);
-  }
-  function setIcon(btn, name){ btn.innerHTML = I[name] || ''; }
-  function play(){
-    var pr = v.play();
-    if (pr && pr.catch) pr.catch(function(){});     // lecture interrompue ou refusée : sans conséquence
-  }
-  function seekBy(d){ v.currentTime = Math.max(0, Math.min(v.duration || 1e9, v.currentTime + d)); }
+  /** Message court sous les commandes (s'efface seul). */
+  const say = (() => {
+    let timer = 0;
+    return (text = '') => {
+      clearTimeout(timer);
+      $('w-msg').textContent = text;
+      if (text) timer = setTimeout(() => { $('w-msg').textContent = ''; }, 4000);
+    };
+  })();
 
+  const setIcon = (button, name) => { button.innerHTML = icons[name] ?? ''; };
+  const play = () => video.play()?.catch(() => {});      // lecture interrompue ou refusée : sans conséquence
+  const seekBy = (seconds) => {
+    video.currentTime = Math.max(0, Math.min(video.duration || 1e9, video.currentTime + seconds));
+  };

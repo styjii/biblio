@@ -23,6 +23,7 @@ def asset(rel):
 
 # Gabarits et scripts communs
 THEME_INIT = asset("templates/partials/theme_init.html")
+ERROR_BACK_JS = asset("js/error-page.js")
 THEME_JS = asset("js/theme.js")
 DECORATE_JS = asset("js/decorate.js")
 LOCK_JS = asset("js/lock.js")

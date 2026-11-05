@@ -1,54 +1,70 @@
-  /* ---------- appareils ---------- */
-  function act(ip, block){
-    if (block && !confirm('Bloquer ' + ip + ' ? Cet appareil n\'aura plus accès à la bibliothèque.')) return;
-    fetch('/dashboard/' + (block ? 'block' : 'unblock') + '?ip=' + encodeURIComponent(ip), {
-      method: 'POST', headers: H, credentials: 'same-origin'
-    })
-      .then(function(r){ return r.json().then(function(j){ return {status: r.status, j: j}; }); })
-      .then(function(x){
-        if (x.status === 401) { location.reload(); return; }
-        if (!x.j.ok) alert(x.j.error || 'Erreur');
-        else if (x.j.warning) alert(x.j.warning);
-        busy = false; load();
-      })
-      .catch(function(){ alert('Connexion impossible.'); });
-  }
-  function row(v){
-    var r = el('div', 'dev' + (v.blocked ? ' blocked' : ''));
-    var ic = el('div', 'ico ' + (v.blocked ? 'danger' : 'code'));
-    ic.innerHTML = v.blocked ? I.ban : I.monitor;
-    var t = el('div', 'text');
-    var top = el('div', 'dev-top');
-    top.appendChild(el('span', 'ip', v.ip));
-    if (v.me) top.appendChild(el('span', 'tag me', 'Cet appareil'));
-    else if (v.local) top.appendChild(el('span', 'tag me', 'Serveur'));
-    if (v.blocked) top.appendChild(el('span', 'tag bad', 'Bloqué'));
-    else if (v.ago !== null && !v.auth) {
-      var w = el('span', 'tag bad', 'Sans jeton');
-      w.title = "N'a jamais présenté le jeton d'accès";
-      top.appendChild(w);
-    }
-    var bits = [];
-    if (v.ua) bits.push(v.ua);
-    if (v.mac) bits.push('MAC ' + v.mac);
-    bits.push(ago(v.ago));
-    if (v.hits) bits.push(v.hits + (v.hits > 1 ? ' requêtes' : ' requête'));
-    t.appendChild(top);
-    t.appendChild(el('div', 'sub', bits.join(' · ')));
-    r.appendChild(ic);
-    r.appendChild(t);
-    var acts = el('div', 'dev-actions');
-    var hb = el('button', 'pill', 'Historique');
-    hb.type = 'button';
-    hb.addEventListener('click', function(){ openHistory(v.ip); });
-    acts.appendChild(hb);
-    if (!v.me && !v.local) {
-      var b = el('button', 'pill' + (v.blocked ? '' : ' danger'), v.blocked ? 'Débloquer' : 'Bloquer');
-      b.type = 'button';
-      b.addEventListener('click', function(){ act(v.ip, !v.blocked); });
-      acts.appendChild(b);
-    }
-    r.appendChild(acts);
-    return r;
-  }
 
+  /** La liste des appareils connectés, avec blocage / déblocage. */
+  class DeviceList {
+    #box = $('devices');
+    #onHistory;                                            // (ip) -> affiche l'historique de cet appareil
+    #onChange;                                             // () -> recharge les données après un blocage
+
+    constructor({onHistory, onChange}) {
+      this.#onHistory = onHistory;
+      this.#onChange = onChange;
+    }
+
+    render(devices) {
+      this.#box.textContent = '';
+      for (const device of devices) this.#box.appendChild(this.#row(device));
+      if (!devices.length) this.#box.appendChild(el('div', 'empty', 'Aucun appareil pour le moment.'));
+    }
+
+    async #toggleBlock(ip, block) {
+      if (block && !confirm(`Bloquer ${ip} ? Cet appareil n'aura plus accès à la bibliothèque.`)) return;
+      try {
+        const r = await fetch(`/dashboard/${block ? 'block' : 'unblock'}?ip=${encodeURIComponent(ip)}`, {
+          method: 'POST', headers: HEADERS, credentials: 'same-origin',
+        });
+        if (r.status === 401) return location.reload();
+        const answer = await r.json();
+        if (!answer.ok) alert(answer.error || 'Erreur');
+        else if (answer.warning) alert(answer.warning);
+        this.#onChange();
+      } catch {
+        alert('Connexion impossible.');
+      }
+    }
+
+    #row(device) {
+      const {ip, blocked, me, local, auth, ago, ua, mac, hits} = device;
+      const row = el('div', `dev${blocked ? ' blocked' : ''}`);
+      const icon = el('div', `ico ${blocked ? 'danger' : 'code'}`);
+      icon.innerHTML = blocked ? config.ban : config.monitor;
+
+      const text = el('div', 'text');
+      const top = el('div', 'dev-top');
+      top.appendChild(el('span', 'ip', ip));
+      if (me) top.appendChild(el('span', 'tag me', 'Cet appareil'));
+      else if (local) top.appendChild(el('span', 'tag me', 'Serveur'));
+      if (blocked) {
+        top.appendChild(el('span', 'tag bad', 'Bloqué'));
+      } else if (ago !== null && !auth) {
+        const warning = el('span', 'tag bad', 'Sans jeton');
+        warning.title = "N'a jamais présenté le jeton d'accès";
+        top.appendChild(warning);
+      }
+      const details = [ua, mac && `MAC ${mac}`, Format.ago(ago), hits && `${hits} ${hits > 1 ? 'requêtes' : 'requête'}`].filter(Boolean);
+      text.append(top, el('div', 'sub', details.join(' · ')));
+
+      const actions = el('div', 'dev-actions');
+      const history = el('button', 'pill', 'Historique');
+      history.type = 'button';
+      history.addEventListener('click', () => this.#onHistory(ip));
+      actions.appendChild(history);
+      if (!me && !local) {
+        const block = el('button', `pill${blocked ? '' : ' danger'}`, blocked ? 'Débloquer' : 'Bloquer');
+        block.type = 'button';
+        block.addEventListener('click', () => this.#toggleBlock(ip, !blocked));
+        actions.appendChild(block);
+      }
+      row.append(icon, text, actions);
+      return row;
+    }
+  }

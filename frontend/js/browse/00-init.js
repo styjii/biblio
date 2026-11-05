@@ -1,58 +1,89 @@
-(function(){
-  var cfg = window.FLCFG, ICO = window.ICO;
-  var body = document.body;
-  var active = 'all';
-  try { if (localStorage.getItem('fl:hidden') === '1') body.classList.add('show-hidden'); } catch(e) {}
+/* Page de navigation : liste (recherche, filtres), menu d'actions des fichiers et dossiers, et boîtes de dialogue
+   (suppression, renommage, création, envoi). Les fichiers de ce dossier forment un seul script (concaténés dans l'ordre) :
+   celui-ci ouvre la fonction, le dernier la ferme et crée les objets. */
+(() => {
+  const cfg = window.FLCFG;
+  const ICO = window.ICO;
+  const $ = (id) => document.getElementById(id);
+  const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
+  const isValidName = (name) => !!name && !/[\\/]/.test(name) && name !== '.' && name !== '..';
 
-  function visible(el){
-    return !el.hidden && (!el.classList.contains('dot') || body.classList.contains('show-hidden'));
-  }
-  function refresh(){
-    var shown = 0, per = {};
-    document.querySelectorAll('.section').forEach(function(s){
-      var g = s.dataset.group, n = 0;
-      s.querySelectorAll('[data-name]').forEach(function(el){ if (visible(el)) n++; });
-      s.querySelector('.count').textContent = n;
-      var off = g !== 'folders' && active !== 'all' && g !== active;
-      s.classList.toggle('off', off);
-      s.hidden = n === 0;
-      if (g !== 'folders') per[g] = n;
-      if (!off) shown += n;
-    });
-    document.querySelectorAll('.fchip').forEach(function(c){
-      var g = c.dataset.g, n = 0;
-      if (g === 'all') { Object.keys(per).forEach(function(k){ n += per[k]; }); }
-      else { n = per[g] || 0; }
-      c.querySelector('b').textContent = n;
-      c.classList.toggle('on', g === active);
-    });
-    var none = document.getElementById('no-result');
-    if (none) none.hidden = shown !== 0;
-  }
+  /** Envoie une action au serveur -> {status, answer}. */
+  const postAction = async (url) => {
+    const r = await fetch(url, {method: 'POST', headers: {'X-Requested-With': 'biblio'}});
+    return {status: r.status, answer: await r.json()};
+  };
 
-  document.querySelectorAll('.fchip').forEach(function(c){
-    c.addEventListener('click', function(){ active = c.dataset.g; refresh(); });
-  });
-
-  var hid = document.getElementById('toggle-hidden');
-  if (hid) {
-    hid.checked = body.classList.contains('show-hidden');
-    hid.addEventListener('change', function(){
-      body.classList.toggle('show-hidden', hid.checked);
-      try { localStorage.setItem('fl:hidden', hid.checked ? '1' : '0'); } catch(e) {}
-      refresh();
-    });
+  /** Action protégée : en cas de succès la page est rechargée ; sinon l'erreur s'affiche sous le formulaire. */
+  async function runAction({url, button, errorBox, onLocked, networkError}) {
+    button.disabled = true;
+    errorBox.textContent = '';
+    try {
+      const {status, answer} = await postAction(url);
+      button.disabled = false;
+      if (!answer.ok) {
+        if (answer.locked) { cfg.unlocked = false; onLocked(); return; }
+        errorBox.textContent = answer.error || `Erreur ${status}`;
+        return;
+      }
+      location.reload();
+    } catch {
+      button.disabled = false;
+      errorBox.textContent = networkError;
+    }
   }
 
-  var search = document.getElementById('search');
-  if (search) {
-    search.addEventListener('input', function(){
-      var q = search.value.trim().toLowerCase();
-      document.querySelectorAll('[data-name]').forEach(function(el){
-        el.hidden = el.dataset.name.indexOf(q) === -1;
+  /** La liste : fichiers cachés, recherche par nom et filtres par type, avec les compteurs. */
+  class Listing {
+    #active = 'all';
+    #hiddenToggle = $('toggle-hidden');
+    #search = $('search');
+
+    constructor() {
+      try { if (localStorage.getItem('fl:hidden') === '1') document.body.classList.add('show-hidden'); } catch { /* préférence par défaut */ }
+      document.querySelectorAll('.fchip').forEach((chip) => {
+        chip.addEventListener('click', () => { this.#active = chip.dataset.g; this.refresh(); });
       });
-      refresh();
-    });
-  }
-  refresh();
+      if (this.#hiddenToggle) {
+        this.#hiddenToggle.checked = document.body.classList.contains('show-hidden');
+        this.#hiddenToggle.addEventListener('change', () => {
+          document.body.classList.toggle('show-hidden', this.#hiddenToggle.checked);
+          try { localStorage.setItem('fl:hidden', this.#hiddenToggle.checked ? '1' : '0'); } catch { /* préférence non mémorisée */ }
+          this.refresh();
+        });
+      }
+      this.#search?.addEventListener('input', () => {
+        const query = this.#search.value.trim().toLowerCase();
+        document.querySelectorAll('[data-name]').forEach((el) => { el.hidden = !el.dataset.name.includes(query); });
+        this.refresh();
+      });
+      this.refresh();
+    }
 
+    #isShown(el) {
+      return !el.hidden && (!el.classList.contains('dot') || document.body.classList.contains('show-hidden'));
+    }
+
+    refresh() {
+      let shown = 0;
+      const perGroup = {};
+      document.querySelectorAll('.section').forEach((section) => {
+        const group = section.dataset.group;
+        const count = [...section.querySelectorAll('[data-name]')].filter((el) => this.#isShown(el)).length;
+        const off = group !== 'folders' && this.#active !== 'all' && group !== this.#active;
+        section.querySelector('.count').textContent = count;
+        section.classList.toggle('off', off);
+        section.hidden = count === 0;
+        if (group !== 'folders') perGroup[group] = count;
+        if (!off) shown += count;
+      });
+      document.querySelectorAll('.fchip').forEach((chip) => {
+        const group = chip.dataset.g;
+        const count = group === 'all' ? Object.values(perGroup).reduce((a, b) => a + b, 0) : (perGroup[group] ?? 0);
+        chip.querySelector('b').textContent = count;
+        chip.classList.toggle('on', group === this.#active);
+      });
+      const none = $('no-result');
+      if (none) none.hidden = shown !== 0;
+    }
+  }

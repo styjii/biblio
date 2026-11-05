@@ -4,7 +4,7 @@ from html import escape
 from urllib.parse import quote
 
 from app import config
-from app.assets import CSS, LOCK_JS, THEME_INIT, THEME_JS, TRANSFER_UI_JS, TRANSFER_VERSION
+from app.assets import CSS, ERROR_BACK_JS, LOCK_JS, THEME_INIT, THEME_JS, TRANSFER_UI_JS, TRANSFER_VERSION
 from app.icons import FAVICON, icon
 from app.templating import render
 from app.utils import js_json
@@ -79,9 +79,6 @@ ERROR_PAGES = {
     416: ("close", "warn", "Plage invalide", "La partie demandée du fichier n'existe pas."),
     500: ("refresh", "danger", "Erreur interne", "Quelque chose s'est mal passé côté serveur. Réessaie dans un instant."),
 }
-ERROR_BACK_JS = ("var b=document.getElementById('err-back');"
-                 "if(b){if(history.length<2){b.hidden=true}"
-                 "else{b.addEventListener('click',function(){history.back()})}}")
 
 
 def error_page(code, detail="", where=""):

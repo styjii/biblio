@@ -8,6 +8,7 @@ from app.assets import DECORATE_JS, LISTEN_CSS, LISTEN_JS, PROGRESS_JS, THEME_JS
 from app.filesystem import guess_mime, kind_of, list_dir, rel_of
 from app.icons import icon
 from app.media import MediaLibrary, media
+from app.playback import playback
 from app.templating import render
 from app.utils import fmt_size, js_json
 from app.views.cards import video_row
@@ -113,7 +114,8 @@ class PlayerRoutes(BaseHandler):
             return
         with media.semaphore:
             dur = media.duration(p)
-        self.send_json({"duration": dur})
+        saved = playback.get(self.client_address[0], rel_of(p))      # où CET appareil en était (barre de reprise des vignettes)
+        self.send_json({"duration": dur, "pos": saved["t"] if saved else 0})
 
     def serve_cover(self, rel):
         p = config.paths.resolve(rel)

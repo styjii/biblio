@@ -1,46 +1,51 @@
-  /* ---------- actualisation ---------- */
-  function render(d){
-    $('host').textContent = d.host;
-    memory(d.memory);
-    disks(d.disks || []);
-    $('n-active').textContent = d.active;
-    $('dev-sub').textContent = d.active + (d.active > 1 ? ' appareils connectés' : ' appareil connecté')
-      + ' (activité depuis moins de ' + Math.round(d.window / 60) + ' min) · ' + d.blocked
-      + (d.blocked > 1 ? ' bloqués' : ' bloqué');
-    var list = $('devices');
-    list.textContent = '';
-    d.devices.forEach(function(v){ list.appendChild(row(v)); });
-    if (!d.devices.length) list.appendChild(el('div', 'empty', 'Aucun appareil pour le moment.'));
-    syncDevices(d.devices);
-  }
-  var busy = false;
-  function load(){
-    if (busy) return;
-    busy = true;
-    fetch('/dashboard/data', {credentials: 'same-origin', cache: 'no-store'})
-      .then(function(r){
-        if (r.status === 401) { location.reload(); return null; }
-        return r.json();
-      })
-      .then(function(d){
-        if (d && d.ok) {
-          render(d);
-          $('upd').textContent = 'mis à jour à ' + new Date().toLocaleTimeString('fr-FR');
+
+  /** Le tableau de bord : chargement périodique des données et rafraîchissement des panneaux. */
+  class Dashboard {
+    #loading = false;
+    #history = new HistoryPanel();
+    #system = new SystemPanel();
+    #devices = new DeviceList({
+      onHistory: (ip) => this.#history.open(ip),
+      onChange: () => this.load({force: true}),
+    });
+
+    constructor() {
+      $('lock').addEventListener('click', async () => {
+        await fetch('/lock', {method: 'POST', headers: HEADERS, credentials: 'same-origin'});
+        location.reload();
+      });
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) { this.load(); this.#history.load(); } });
+      setInterval(() => { if (!document.hidden) this.load(); }, 3000);
+      setInterval(() => { if (!document.hidden) this.#history.load(); }, 15000);
+      this.load();
+      this.#history.load();
+    }
+
+    #render(data) {
+      $('host').textContent = data.host;
+      this.#system.memory(data.memory);
+      this.#system.disks(data.disks ?? []);
+      $('n-active').textContent = data.active;
+      $('dev-sub').textContent = `${data.active} ${data.active > 1 ? 'appareils connectés' : 'appareil connecté'} (activité depuis moins de ${Math.round(data.window / 60)} min) · ${data.blocked}${data.blocked > 1 ? ' bloqués' : ' bloqué'}`;
+      this.#devices.render(data.devices);
+      this.#history.syncDevices(data.devices);
+    }
+
+    async load({force = false} = {}) {
+      if (this.#loading && !force) return;
+      this.#loading = true;
+      try {
+        const data = await getJson('/dashboard/data');
+        if (data?.ok) {
+          this.#render(data);
+          $('upd').textContent = `mis à jour à ${new Date().toLocaleTimeString('fr-FR')}`;
         }
-      })
-      .catch(function(){ $('upd').textContent = 'connexion perdue, nouvel essai…'; })
-      .then(function(){ busy = false; });
+      } catch {
+        $('upd').textContent = 'connexion perdue, nouvel essai…';
+      }
+      this.#loading = false;
+    }
   }
-  $('lock').addEventListener('click', function(){
-    fetch('/lock', {method: 'POST', headers: H, credentials: 'same-origin'})
-      .then(function(){ location.reload(); });
-  });
-  hsel.addEventListener('change', loadHistory);
-  hrange.addEventListener('change', loadHistory);
-  hmetric.addEventListener('change', function(){ if (hdata) drawHistory(); });
-  document.addEventListener('visibilitychange', function(){ if (!document.hidden) { load(); loadHistory(); } });
-  setInterval(function(){ if (!document.hidden) load(); }, 3000);
-  setInterval(function(){ if (!document.hidden) loadHistory(); }, 15000);
-  load();
-  loadHistory();
+
+  new Dashboard();
 })();

@@ -1,14 +1,19 @@
-  /* ----- informations des pistes (durée, tags) : chargées à la demande ----- */
-  function getInfo(i){
-    if (!infos[i]) {
-      infos[i] = fetch('/meta?f=' + T[i].q)
-        .then(function(r){ return r.ok ? r.json() : {}; })
-        .catch(function(){ return {}; });
-    }
-    return infos[i];
-  }
-  function showDur(i, d){
-    var el = rows[i] && rows[i].querySelector('.td');
-    if (el && d) el.textContent = fmt(d);
-  }
 
+  /** Informations des pistes (durée, titre, artiste, pochette) : demandées au serveur à la demande, une seule fois par piste. */
+  class TrackInfo {
+    #cache = new Map();
+
+    get(index) {
+      if (!this.#cache.has(index)) this.#cache.set(index, this.#fetch(index));
+      return this.#cache.get(index);
+    }
+
+    async #fetch(index) {
+      try {
+        const r = await fetch(`/meta?f=${tracks[index].q}`);
+        return r.ok ? await r.json() : {};
+      } catch {
+        return {};
+      }
+    }
+  }

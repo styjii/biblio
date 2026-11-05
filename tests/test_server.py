@@ -215,11 +215,11 @@ class ServerTests(unittest.TestCase):
         status, r, body = self.fetch("GET", "/static/upload-worker.js?v=x", cookie=self.cookie)
         self.assertEqual(status, 200)
         self.assertIn("javascript", r.getheader("Content-Type", ""))
-        self.assertIn("function TransferEngine", body)         # moteur
+        self.assertIn("class TransferEngine", body)            # moteur
         self.assertIn("onconnect", body)                       # glue du SharedWorker
         status, r, body = self.fetch("GET", "/static/transfer-engine.js", cookie=self.cookie)
         self.assertEqual(status, 200)
-        self.assertIn("function TransferEngine", body)
+        self.assertIn("class TransferEngine", body)
         self.assertNotIn("onconnect", body)                    # le moteur de repli ne contient pas le worker
         # le panneau est présent sur toutes les pages, pas seulement dans la navigation
         for path in ("/", "/view?f=notes.txt"):

@@ -1,40 +1,38 @@
-(function(){
-  function fmt(s){
-    s = Math.floor(s);
-    var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
-    var mm = h ? ('0' + m).slice(-2) : String(m);
-    return (h ? h + ':' : '') + mm + ':' + ('0' + x).slice(-2);
+/* Vignettes vidéo : durée affichée sur l'image et barre de reprise (position de CET appareil, fournie par /meta). */
+(() => {
+  const fmt = (seconds) => {
+    const s = Math.floor(seconds);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor(s % 3600 / 60);
+    const mm = h ? String(m).padStart(2, '0') : String(m);
+    return `${h ? `${h}:` : ''}${mm}:${String(s % 60).padStart(2, '0')}`;
+  };
+
+  const showBar = (card, position, duration) => {
+    const bar = card.querySelector('.bar');
+    if (!bar || !duration || !position) return;
+    bar.hidden = false;
+    bar.firstElementChild.style.width = `${Math.min(100, position / duration * 100)}%`;
+  };
+
+  async function decorate(card) {
+    try {
+      const {duration, pos = 0} = await (await fetch(`/meta?f=${card.dataset.f}`)).json();
+      if (!duration) return;
+      const label = card.querySelector('.dur');
+      if (label) { label.textContent = fmt(duration); label.hidden = false; }
+      showBar(card, pos, duration);
+    } catch { /* vignette laissée telle quelle */ }
   }
-  function load(key){
-    try { return JSON.parse(localStorage.getItem('vl:pos:' + key)); }
-    catch(e) { return null; }
-  }
-  function bar(el, t, d){
-    var b = el.querySelector('.bar');
-    if (!b || !d || !t) return;
-    b.hidden = false;
-    b.firstElementChild.style.width = Math.min(100, t / d * 100) + '%';
-  }
-  var items = document.querySelectorAll('[data-key]');
-  var io = 'IntersectionObserver' in window ? new IntersectionObserver(function(es){
-    es.forEach(function(e){
-      if (!e.isIntersecting) return;
-      io.unobserve(e.target);
-      var el = e.target;
-      fetch('/meta?f=' + el.dataset.f)
-        .then(function(r){ return r.json(); })
-        .then(function(j){
-          if (!j.duration) return;
-          var d = el.querySelector('.dur');
-          if (d) { d.textContent = fmt(j.duration); d.hidden = false; }
-          var s = load(el.dataset.key);
-          if (s) bar(el, s.t, s.d || j.duration);
-        }).catch(function(){});
-    });
-  }, {rootMargin: '200px'}) : null;
-  items.forEach(function(el){
-    var s = load(el.dataset.key);
-    if (s && s.d) bar(el, s.t, s.d);
-    if (io) io.observe(el);
-  });
+
+  const cards = document.querySelectorAll('[data-key]');
+  if (!('IntersectionObserver' in window)) { cards.forEach(decorate); return; }
+  const observer = new IntersectionObserver((entries) => {
+    for (const {isIntersecting, target} of entries) {
+      if (!isIntersecting) continue;
+      observer.unobserve(target);
+      decorate(target);
+    }
+  }, {rootMargin: '200px'});
+  cards.forEach((card) => observer.observe(card));
 })();

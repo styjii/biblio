@@ -1,46 +1,63 @@
-/* ---------- HTML brut : assaini via DOMParser (inerte) ---------- */
-var HT = {}, HA = {}, DROP = {};
-'a abbr b blockquote br caption center cite code col colgroup dd del details div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i img ins kbd li mark ol p picture pre q s small span strong sub summary sup table tbody td tfoot th thead tr u ul'
-  .split(' ').forEach(function(t){ HT[t] = 1; });
-'href src alt title width height align colspan rowspan open start valign'.split(' ').forEach(function(a){ HA[a] = 1; });
-'script style iframe object embed noscript template textarea svg math link meta form input button select audio video source'.split(' ')
-  .forEach(function(t){ DROP[t] = 1; });
-var VOID = {br: 1, hr: 1, img: 1, col: 1};
-function cleanHtml(str){
-  var doc = new DOMParser().parseFromString('<body>' + str + '</body>', 'text/html');
-  function walk(node){
-    var out = '';
-    node.childNodes.forEach(function(c){
-      if (c.nodeType === 3) { out += esc(c.nodeValue); return; }
-      if (c.nodeType !== 1) return;
-      var t = c.tagName.toLowerCase();
-      if (DROP[t]) return;
-      var inner = VOID[t] ? '' : walk(c);
-      if (!HT[t]) { out += inner; return; }
-      var attrs = '', ext = false;
-      Array.prototype.forEach.call(c.attributes, function(a){
-        var n = a.name.toLowerCase(), v = a.value;
-        if (!HA[n]) return;
-        if (n === 'href' || n === 'src') {
-          var r = safeUrl(v, t === 'img');
-          if (!r) return;
-          if (r.ext && n === 'href') ext = true;
-          v = r.href;
-        } else if (n === 'align') {
-          if (!/^(?:left|right|center|justify)$/i.test(v)) return;
-        } else if (n === 'width' || n === 'height' || n === 'colspan' || n === 'rowspan' || n === 'start') {
-          if (!/^\d+%?$/.test(v)) return;
-        } else if (n === 'open') {
-          v = '';
-        }
-        attrs += ' ' + n + '="' + esc(v) + '"';
-      });
-      if (t === 'a' && ext) attrs += ' target="_blank" rel="noopener noreferrer"';
-      if (t === 'img') attrs += ' loading="lazy"';
-      out += VOID[t] ? '<' + t + attrs + '>' : '<' + t + attrs + '>' + inner + '</' + t + '>';
-    });
-    return out;
-  }
-  return walk(doc.body);
-}
+  /** HTML brut dans le Markdown : lu dans un document inerte (DOMParser, rien ne s'exécute) ; seuls les balises et attributs sûrs sont gardés. */
+  class HtmlSanitizer {
+    static TAGS = new Set(
+      'a abbr b blockquote br caption center cite code col colgroup dd del details div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i img ins kbd li mark ol p picture pre q s small span strong sub summary sup table tbody td tfoot th thead tr u ul'.split(
+        ' ',
+      ),
+    );
+    static ATTRIBUTES = new Set('href src alt title width height align colspan rowspan open start valign'.split(' '));
+    static DROPPED = new Set(
+      'script style iframe object embed noscript template textarea svg math link meta form input button select audio video source'.split(' '),
+    );
+    static VOID = new Set(['br', 'hr', 'img', 'col']);
+    static NUMERIC = new Set(['width', 'height', 'colspan', 'rowspan', 'start']);
 
+    static clean(html) {
+      const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+      return HtmlSanitizer.walk(doc.body);
+    }
+
+    static walk(node) {
+      let out = '';
+      for (const child of node.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          out += esc(child.nodeValue);
+          continue;
+        }
+        if (child.nodeType !== Node.ELEMENT_NODE) continue;
+        const tag = child.tagName.toLowerCase();
+        if (HtmlSanitizer.DROPPED.has(tag)) continue;
+        const inner = HtmlSanitizer.VOID.has(tag) ? '' : HtmlSanitizer.walk(child);
+        if (!HtmlSanitizer.TAGS.has(tag)) {
+          out += inner;
+          continue;
+        }
+        let attributes = '';
+        let external = false;
+        for (const attribute of child.attributes) {
+          const name = attribute.name.toLowerCase();
+          let value = attribute.value;
+          if (!HtmlSanitizer.ATTRIBUTES.has(name)) continue;
+          if (name === 'href' || name === 'src') {
+            const resolved = LinkResolver.safeUrl(value, tag === 'img');
+            if (!resolved) continue;
+            if (resolved.ext && name === 'href') external = true;
+            value = resolved.href;
+          } else if (name === 'align') {
+            if (!/^(?:left|right|center|justify)$/i.test(value)) continue;
+          } else if (HtmlSanitizer.NUMERIC.has(name)) {
+            if (!/^\d+%?$/.test(value)) continue;
+          } else if (name === 'open') {
+            value = '';
+          }
+          attributes += ` ${name}="${esc(value)}"`;
+        }
+        if (tag === 'a' && external) attributes += ' target="_blank" rel="noopener noreferrer"';
+        if (tag === 'img') attributes += ' loading="lazy"';
+        out += HtmlSanitizer.VOID.has(tag) ? `<${tag}${attributes}>` : `<${tag}${attributes}>${inner}</${tag}>`;
+      }
+      return out;
+    }
+  }
+
+  
