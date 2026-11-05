@@ -25,6 +25,20 @@
 
   const setIcon = (button, name) => { button.innerHTML = icons[name] ?? ''; };
   const play = () => video.play()?.catch(() => {});      // lecture interrompue ou refusée : sans conséquence
-  const seekBy = (seconds) => {
-    video.currentTime = Math.max(0, Math.min(video.duration || 1e9, video.currentTime + seconds));
-  };
+
+  const END_GUARD = 1;                                     // s : un saut ne mène jamais jusqu'à la toute fin (la vidéo se terminerait d'un coup, et « lecture » la relancerait à 0:00)
+  const SEEK_DELAY = 120;                                  // ms : des sauts rapprochés sont regroupés en un seul déplacement (un seul chargement de la vidéo, pas une rafale)
+
+  /** Saut relatif (±10 s…). Les appuis rapprochés s'additionnent, mais le lecteur ne bouge qu'une fois. */
+  const seekBy = (() => {
+    let target = null;
+    let timer = 0;
+    return (seconds) => {
+      if (!Number.isFinite(video.duration)) return;        // durée inconnue : impossible de borner le saut
+      const from = target ?? video.currentTime;
+      const limit = Math.max(0, video.duration - END_GUARD);
+      target = seconds > 0 ? Math.max(from, Math.min(limit, from + seconds)) : Math.max(0, from + seconds);
+      clearTimeout(timer);
+      timer = setTimeout(() => { video.currentTime = target; target = null; }, SEEK_DELAY);
+    };
+  })();

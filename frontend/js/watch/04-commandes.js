@@ -4,6 +4,7 @@
     #order = new PlayOrder();
     #settings = new PlaybackSettings();
     #resume = new ResumeTracker();
+    #guard = new PlaybackGuard();
     #autoNext = $('autonext');
     #shuffle = prefs.get('shuffle', '0') === '1';
     #repeat = ['off', 'all', 'one'].includes(prefs.get('repeat', 'off')) ? prefs.get('repeat', 'off') : 'off';   // off | all | one
