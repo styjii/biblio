@@ -73,7 +73,7 @@
       this.#view.applyTitle(null, index);
       this.#view.setCover(null, index);
       this.#showInfo(index);
-      this.#position.switchTo(track.f);                            // la piste quittée est enregistrée avant de charger la suivante
+      this.#position.begin(index);                                 // la piste quittée est mémorisée avant de charger la suivante, dont on cherche la position à reprendre
       audio.src = `/raw?f=${track.q}`;
       audio.defaultPlaybackRate = audio.playbackRate = this.#rate;
       say('');
@@ -94,7 +94,12 @@
       this.#list.showDuration(index, info?.duration);
     }
 
+    /** Clic sur une piste de la liste. La piste déjà chargée n'est pas rechargée (elle repartirait du début) : si elle est en pause, on la relance. */
     playIndex(index) {
+      if (index === this.#index && audio.src && !audio.error) {
+        if (audio.paused) this.play();
+        return;
+      }
       this.#order.rebuild(this.#shuffle, index);
       this.start(index, true);
     }
@@ -174,11 +179,11 @@
 
     #bindAudioEvents() {
       const view = this.#view;
-      const loaded = () => { view.loading = false; this.#renderPlay(); };
+      const loaded = () => { view.loading = false; this.#renderPlay(); this.#position.confirm(); };
       audio.addEventListener('loadedmetadata', () => {
         this.#errorRun = 0;
         this.#list.showDuration(this.#index, audio.duration);
-        this.#position.tryResume(this.#index);
+        this.#position.onMetadata();
         view.renderSeek();
         this.#updatePositionState();
       });
