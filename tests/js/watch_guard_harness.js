@@ -226,4 +226,52 @@ const out = {};
   out.retour_sur_la_page = {paused: w.video.paused, error: !!w.video.error, time: w.video.currentTime};
 }
 
+// 9. Reprise lente (saut loin dans un gros fichier, disque ou liaison lents) : les données arrivent au compte-gouttes pendant 2 minutes.
+//    La vidéo ne doit JAMAIS être rechargée (ce serait repartir de zéro, en boucle), même avec un retour du réseau ou de l'onglet.
+{
+  const w = started(makeWorld());
+  const loads = w.net.loads;
+  w.video.currentTime = 3123;
+  w.video.readyState = 1;
+  w.video.seeking = true;
+  w.video.emit('seeking');
+  w.video.emit('waiting');
+  for (let i = 0; i < 24; i++) {
+    w.advance(5000);
+    w.video.emit('progress');
+    if (i === 6) w.win.emit('online');                                      // changement de réseau pendant le chargement
+    if (i === 12) { w.doc.emit('visibilitychange'); w.win.emit('pageshow'); }
+  }
+  const reloaded = w.net.loads - loads;
+  w.video.seeking = false;
+  w.video.readyState = 4;
+  w.video.emit('seeked');
+  w.video.emit('canplay');
+  w.video.emit('playing');
+  w.play(5);
+  out.reprise_lente = {reloaded, paused: w.video.paused, time: w.video.currentTime};
+}
+
+// 10. Réseau qui change (événement « online ») pendant une lecture normale : aucun rechargement.
+{
+  const w = started(makeWorld());
+  const loads = w.net.loads;
+  w.win.emit('online');
+  w.doc.emit('visibilitychange');
+  w.win.emit('pageshow');
+  w.play(10);
+  out.online_en_lecture = {reloaded: w.net.loads - loads, paused: w.video.paused, time: w.video.currentTime};
+}
+
+// 11. Silence complet du flux pendant plus de 30 s (connexion morte) : là, et seulement là, la vidéo est rechargée.
+{
+  const w = started(makeWorld());
+  const loads = w.net.loads;
+  w.stall();
+  w.advance(20000);
+  const early = w.net.loads - loads;
+  w.advance(15000);
+  out.silence_complet = {early, reloaded: w.net.loads - loads, time: w.video.currentTime, paused: w.video.paused};
+}
+
 console.log(JSON.stringify(out));

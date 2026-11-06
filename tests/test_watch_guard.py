@@ -47,6 +47,20 @@ class WatchGuardTests(unittest.TestCase):
     def test_fichier_abime_n_est_pas_recharge_indefiniment(self):
         self.assertLessEqual(self.r["fichier_abime"]["loads"], 4)
 
+    def test_reprise_lente_n_est_jamais_rechargee(self):
+        r = self.r["reprise_lente"]
+        self.assertEqual(r["reloaded"], 0)                           # données au compte-gouttes : on attend, on ne repart pas de zéro
+        self.assertEqual((r["paused"], r["time"]), (False, 3128))
+
+    def test_changement_de_reseau_en_lecture_normale_ne_recharge_rien(self):
+        r = self.r["online_en_lecture"]
+        self.assertEqual((r["reloaded"], r["paused"], r["time"]), (0, False, 130))
+
+    def test_silence_complet_du_flux_finit_par_recharger(self):
+        r = self.r["silence_complet"]
+        self.assertEqual(r["early"], 0)                              # pas avant 30 s de silence
+        self.assertEqual((r["reloaded"], r["paused"], r["time"]), (1, False, 120))
+
 
 if __name__ == "__main__":
     unittest.main()

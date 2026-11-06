@@ -4,7 +4,9 @@
       Une coupure du réseau n'est jamais définitive : les rechargements se poursuivent à intervalles croissants, et reprennent
       aussitôt au retour de la connexion ou de la page (événement « online », onglet de nouveau visible, clic sur la vidéo). */
   class PlaybackGuard {
-    static STALL_LIMIT = 20000;                             // ms d'attente de données avant de recharger la vidéo
+    static STALL_LIMIT = 30000;                             // ms SANS AUCUNE donnée reçue avant de recharger la vidéo (un flux lent mais vivant n'est jamais rechargé)
+    static IDLE_ONLINE = 1500;                              // ms de silence du flux à partir desquels un retour du réseau relance la vidéo
+    static IDLE_VISIBLE = 4000;                             // idem pour un retour sur la page
     static RETRY_DELAYS = [0, 2000, 5000, 10000, 15000];    // ms avant chaque rechargement ; le dernier délai se répète tant que la vidéo ne repart pas
     static MAX_DECODE_RETRIES = 3;                          // fichier abîmé (erreur de décodage) : on n'insiste pas indéfiniment
 
@@ -18,15 +20,17 @@
     #recoveredAt = 0;
     #stallTimer = 0;
     #retryTimer = 0;                                        // prochain rechargement programmé
+    #lastData = Date.now();                                 // dernier signe de vie du flux (données reçues, lecture qui avance)
 
     constructor() {
       const on = (type, handler) => video.addEventListener(type, handler);
       on('loadedmetadata', () => this.#onMetadata());
       on('timeupdate', () => this.#onTime());
       on('seeking', () => { if (!this.#recovering && Number.isFinite(video.currentTime)) this.#good = video.currentTime; });   // un saut raté reprend à sa destination
-      on('seeked', () => this.#clearStall());
-      on('canplay', () => this.#clearStall());
-      on('playing', () => { this.#wantPlay = true; this.#clearStall(); });
+      on('seeked', () => { this.#alive(); this.#clearStall(); });
+      on('canplay', () => { this.#alive(); this.#clearStall(); });
+      on('playing', () => { this.#wantPlay = true; this.#alive(); this.#clearStall(); });
+      for (const type of ['progress', 'loadstart', 'loadeddata', 'durationchange']) on(type, () => this.#alive());      // des données arrivent : le flux est vivant, même lentement
       on('play', () => this.#onPlay());
       on('pause', () => { this.#clearStall(); if (!video.ended && !this.#recovering) this.#wantPlay = false; });
       on('waiting', () => this.#armStall());
@@ -35,13 +39,16 @@
       on('pointerdown', () => { if (video.error) this.#retryNow(true); });        // lecteur resté en erreur : un clic sur la vidéo relance tout de suite
 
       // retour du réseau ou de la page : on ne laisse pas la vidéo bloquée là où la coupure l'a laissée
-      window.addEventListener('online', () => this.#retryNow());
-      window.addEventListener('pageshow', () => this.#checkAlive());
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') this.#checkAlive(); });
+      window.addEventListener('online', () => this.#checkAlive(PlaybackGuard.IDLE_ONLINE));
+      window.addEventListener('pageshow', () => this.#checkAlive(PlaybackGuard.IDLE_VISIBLE));
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') this.#checkAlive(PlaybackGuard.IDLE_VISIBLE); });
     }
+
+    #alive() { this.#lastData = Date.now(); }
 
     #onMetadata() {
       this.#everLoaded = true;
+      this.#alive();
       const restore = this.#restore;
       if (!restore) return;
       this.#restore = null;
@@ -55,6 +62,7 @@
     #onTime() {
       if (this.#recovering || video.seeking || video.readyState < 2) return;
       this.#good = video.currentTime;
+      this.#alive();
       if (this.#retries && video.currentTime > this.#recoveredAt + 10) this.#retries = 0;     // la lecture est de nouveau stable
     }
 
@@ -74,23 +82,37 @@
       this.#recover('Lecture interrompue.');
     }
 
-    /** La vidéo est restée sans données alors que la lecture était voulue, ou en erreur : vrai si elle ne reprendra pas sans aide. */
-    #isStuck() {
-      return !!video.error || (this.#wantPlay && !video.paused && !video.ended && video.readyState < 3);
+    /** Le flux ne donne plus signe de vie depuis `idle` ms alors que la lecture est voulue, ou le lecteur est en erreur. */
+    #isStuck(idle) {
+      if (video.error) return true;
+      return this.#wantPlay && !video.paused && !video.ended && video.readyState < 3 && Date.now() - this.#lastData > idle;
     }
 
-    /** Retour du réseau ou de la page : si la lecture est bloquée (ou en cours de reprise), on relance sans attendre. */
-    #checkAlive() {
-      if (this.#recovering || this.#isStuck()) this.#retryNow();
+    /** Retour du réseau ou de la page : si la lecture est réellement bloquée, on relance sans attendre.
+        Une vidéo qui charge encore (même lentement) ou qui joue normalement n'est jamais rechargée : ce serait repartir de zéro. */
+    #checkAlive(idle) {
+      if (this.#recovering) {
+        if (this.#retryTimer || video.error || Date.now() - this.#lastData > idle) this.#retryNow();    // attente entre deux essais, ou rechargement resté sans réponse
+        return;
+      }
+      if (this.#isStuck(idle)) this.#retryNow();
     }
 
-    /** Aucune donnée n'arrive alors que la lecture est censée avancer : on finit par recharger la vidéo. */
+    /** La lecture attend des données : on ne recharge qu'après un long silence complet du flux, pas tant qu'il avance, même lentement. */
     #armStall() {
       if (this.#stallTimer || video.paused) return;
+      this.#alive();
+      this.#watchStall(PlaybackGuard.STALL_LIMIT);
+    }
+
+    #watchStall(wait) {
       this.#stallTimer = setTimeout(() => {
         this.#stallTimer = 0;
-        if (!video.paused && video.readyState < 3) this.#recover('Connexion interrompue.');
-      }, PlaybackGuard.STALL_LIMIT);
+        if (video.paused || video.readyState >= 3) return;
+        const silence = Date.now() - this.#lastData;
+        if (silence < PlaybackGuard.STALL_LIMIT) { this.#watchStall(PlaybackGuard.STALL_LIMIT - silence); return; }     // des données sont arrivées entre-temps : on attend encore
+        this.#recover('Connexion interrompue.');
+      }, wait);
     }
 
     #clearStall() {
