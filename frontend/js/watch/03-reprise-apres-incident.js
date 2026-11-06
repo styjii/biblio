@@ -1,9 +1,12 @@
 
   /** Garde-fou de la lecture : retient la dernière bonne position, repart de là si le flux se coupe (réseau, sauts rapprochés…)
-      et empêche « lecture » de relancer la vidéo à 0:00 après un arrêt inattendu. */
+      et empêche « lecture » de relancer la vidéo à 0:00 après un arrêt inattendu.
+      Une coupure du réseau n'est jamais définitive : les rechargements se poursuivent à intervalles croissants, et reprennent
+      aussitôt au retour de la connexion ou de la page (événement « online », onglet de nouveau visible, clic sur la vidéo). */
   class PlaybackGuard {
     static STALL_LIMIT = 20000;                             // ms d'attente de données avant de recharger la vidéo
-    static MAX_RETRIES = 3;                                 // rechargements d'affilée avant d'abandonner
+    static RETRY_DELAYS = [0, 2000, 5000, 10000, 15000];    // ms avant chaque rechargement ; le dernier délai se répète tant que la vidéo ne repart pas
+    static MAX_DECODE_RETRIES = 3;                          // fichier abîmé (erreur de décodage) : on n'insiste pas indéfiniment
 
     #good = 0;                                              // dernière position où la lecture était réellement en cours (ou visée par un saut)
     #wantPlay = false;                                      // la lecture était voulue (pas mise en pause par l'utilisateur)
@@ -14,6 +17,7 @@
     #retries = 0;
     #recoveredAt = 0;
     #stallTimer = 0;
+    #retryTimer = 0;                                        // prochain rechargement programmé
 
     constructor() {
       const on = (type, handler) => video.addEventListener(type, handler);
@@ -28,6 +32,12 @@
       on('waiting', () => this.#armStall());
       on('ended', () => { this.#finished = true; this.#clearStall(); });
       on('error', () => this.#onError());
+      on('pointerdown', () => { if (video.error) this.#retryNow(true); });        // lecteur resté en erreur : un clic sur la vidéo relance tout de suite
+
+      // retour du réseau ou de la page : on ne laisse pas la vidéo bloquée là où la coupure l'a laissée
+      window.addEventListener('online', () => this.#retryNow());
+      window.addEventListener('pageshow', () => this.#checkAlive());
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') this.#checkAlive(); });
     }
 
     #onMetadata() {
@@ -36,6 +46,8 @@
       if (!restore) return;
       this.#restore = null;
       this.#recovering = false;
+      clearTimeout(this.#retryTimer);
+      this.#retryTimer = 0;
       if (restore.position > 0 && restore.position < video.duration - 0.5) video.currentTime = restore.position;
       if (restore.play) play();
     }
@@ -49,6 +61,7 @@
     /** « Lecture » : si la vidéo est revenue à 0:00 sans que personne ne l'ait demandé, on repart de la dernière bonne position. */
     #onPlay() {
       this.#wantPlay = true;
+      if (this.#restore) this.#restore.play = true;                  // « lecture » demandée pendant une reprise : elle repartira d'elle-même
       const lost = !this.#finished && !this.#recovering && this.#good > 5 && video.currentTime < 1;
       this.#finished = false;
       if (!lost) return;
@@ -57,8 +70,18 @@
     }
 
     #onError() {
-      if (video.error?.code === 4 && !this.#everLoaded) return;   // format non pris en charge dès le départ : un rechargement n'y changerait rien
+      if (video.error?.code === 4 && !this.#everLoaded && navigator.onLine !== false) return;   // format non pris en charge dès le départ : un rechargement n'y changerait rien
       this.#recover('Lecture interrompue.');
+    }
+
+    /** La vidéo est restée sans données alors que la lecture était voulue, ou en erreur : vrai si elle ne reprendra pas sans aide. */
+    #isStuck() {
+      return !!video.error || (this.#wantPlay && !video.paused && !video.ended && video.readyState < 3);
+    }
+
+    /** Retour du réseau ou de la page : si la lecture est bloquée (ou en cours de reprise), on relance sans attendre. */
+    #checkAlive() {
+      if (this.#recovering || this.#isStuck()) this.#retryNow();
     }
 
     /** Aucune donnée n'arrive alors que la lecture est censée avancer : on finit par recharger la vidéo. */
@@ -75,22 +98,43 @@
       this.#stallTimer = 0;
     }
 
-    /** Recharge la vidéo, rejoint la dernière bonne position et relance la lecture si elle était en cours. */
-    #recover(reason) {
+    /** Relance immédiatement la reprise (réseau revenu, page de nouveau visible) ; `play` : l'utilisateur veut lire la vidéo. */
+    #retryNow(play = false) {
+      this.#retries = 0;
+      this.#recover('Connexion rétablie.', true);
+      if (play && this.#restore) this.#restore.play = true;
+    }
+
+    /** Recharge la vidéo, rejoint la dernière bonne position et relance la lecture si elle était en cours.
+        Si le rechargement échoue (réseau encore coupé), l'erreur qui suit reprogramme un nouvel essai, un peu plus tard :
+        on n'abandonne jamais, la lecture repart d'elle-même dès que le serveur répond de nouveau. */
+    #recover(reason, now = false) {
       this.#clearStall();
-      if (this.#retries >= PlaybackGuard.MAX_RETRIES) {
-        this.#recovering = false;
+      if (video.error?.code === 3 && this.#retries >= PlaybackGuard.MAX_DECODE_RETRIES && navigator.onLine !== false) {
+        this.#recovering = false;                              // erreur de décodage qui revient au même endroit : le fichier lui-même est en cause
         this.#restore = null;
         say(`${reason} Recharge la page pour reprendre.`);
         return;
       }
+      if (this.#retryTimer && !now) return;                    // un rechargement est déjà programmé
+      clearTimeout(this.#retryTimer);
+      this.#retryTimer = 0;
+      if (!this.#recovering) {                                 // première coupure : on retient où on en était (et si la lecture était voulue)
+        this.#recovering = true;
+        this.#recoveredAt = this.#good;
+        this.#restore = {position: this.#good, play: this.#wantPlay};
+      }
+      const delays = PlaybackGuard.RETRY_DELAYS;
+      const delay = now ? 0 : delays[Math.min(this.#retries, delays.length - 1)];
       this.#retries++;
-      const wantPlay = this.#recovering ? this.#restore?.play : this.#wantPlay;
-      this.#recovering = true;
-      this.#recoveredAt = this.#good;
-      this.#restore = {position: this.#good, play: !!wantPlay};
       say(`${reason} Reprise à ${Progress.fmt(this.#good)}…`);
-      video.autoplay = !!wantPlay;                              // sans cela, la lecture démarrerait seule même si elle était en pause
+      this.#retryTimer = setTimeout(() => this.#reload(), delay);
+    }
+
+    #reload() {
+      this.#retryTimer = 0;
+      if (!this.#recovering) return;
+      video.autoplay = !!this.#restore?.play;                  // sans cela, la lecture démarrerait seule même si elle était en pause
       video.load();
     }
   }

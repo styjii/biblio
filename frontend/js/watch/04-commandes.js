@@ -7,6 +7,7 @@
     #guard = new PlaybackGuard();
     #autoNext = $('autonext');
     #shuffle = prefs.get('shuffle', '0') === '1';
+    #pendingUrl = null;                                    // vidéo à ouvrir dès que le réseau revient
     #repeat = ['off', 'all', 'one'].includes(prefs.get('repeat', 'off')) ? prefs.get('repeat', 'off') : 'off';   // off | all | one
 
     constructor() {
@@ -32,7 +33,15 @@
     #goto(target) {
       this.#order.save(target);
       if (window.Transfers) window.Transfers.open(items[target].u);     // pendant un envoi, nouvel onglet : l'envoi n'est pas interrompu
-      else location.href = items[target].u;
+      else this.#navigate(items[target].u);
+    }
+
+    /** Ouvre la page d'une vidéo ; hors connexion, attend le retour du réseau (sinon le navigateur afficherait sa page d'erreur et la liste de lecture serait perdue). */
+    #navigate(url) {
+      if (navigator.onLine !== false) { location.href = url; return; }
+      say('Hors connexion : la vidéo suivante démarrera au retour du réseau.');
+      if (!this.#pendingUrl) window.addEventListener('online', () => { const target = this.#pendingUrl; this.#pendingUrl = null; if (target) location.href = target; }, {once: true});
+      this.#pendingUrl = url;
     }
 
     /** Vidéo suivante ; `auto` : fin de lecture (et non une demande de l'utilisateur). */
