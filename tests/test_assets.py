@@ -7,7 +7,7 @@ from pathlib import Path
 
 from app import assets
 
-SCRIPTS = ["THEME_JS", "DECORATE_JS", "LOCK_JS", "BROWSE_JS", "VIEWER_JS", "PREVIEW_JS", "WATCH_JS", "MD_JS",
+SCRIPTS = ["THEME_JS", "DECORATE_JS", "HOVER_PREVIEW_JS", "LOCK_JS", "BROWSE_JS", "VIEWER_JS", "PREVIEW_JS", "WATCH_JS", "MD_JS",
            "DASH_JS", "LISTEN_JS"]
 STYLES = ["CSS", "MD_CSS", "DASH_CSS", "LISTEN_CSS"]
 

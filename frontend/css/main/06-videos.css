@@ -29,3 +29,14 @@
 .vname{font-weight:600; font-size:15px; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere}
 .vsub{font-size:12.5px; color:var(--muted); margin-top:4px}
 
+/* aperçu vidéo (frontend/js/hover-preview.js) : l'extrait apparaît en fondu par-dessus l'image, sous la durée et les boutons ;
+   quand le script le retire, la vignette retrouve son état initial */
+.thumb,.rthumb{-webkit-touch-callout:none; -webkit-user-select:none; user-select:none}      /* appui long : ni menu du navigateur, ni sélection */
+.thumb video.pv,.rthumb video.pv{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000; opacity:0; transition:opacity .2s; pointer-events:none}
+.thumb.pv-on video.pv,.rthumb.pv-on video.pv{opacity:1}
+.vcard .thumb.pv-live .play{opacity:0}                  /* le bouton lecture s'efface pendant l'aperçu */
+@media(prefers-reduced-motion:reduce){.thumb video.pv,.rthumb video.pv{transition:none}}
+/* tactile : l'appui maintenu sur la carte entière lance l'aperçu, il ne doit ni sélectionner le titre ni ouvrir le menu du lien */
+@media(pointer:coarse){.vcard,.row{-webkit-touch-callout:none; -webkit-user-select:none; user-select:none}}
+.vcard,.row{-webkit-user-drag:none}
+.thumb img,.rthumb img{-webkit-user-drag:none}               /* pas de glisser-déposer de l'image pendant l'appui long */

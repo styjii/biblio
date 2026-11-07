@@ -4,7 +4,7 @@ from html import escape
 from urllib.parse import quote
 
 from app import config
-from app.assets import DECORATE_JS, LISTEN_CSS, LISTEN_JS, PROGRESS_JS, THEME_JS, WATCH_JS
+from app.assets import DECORATE_JS, HOVER_PREVIEW_JS, LISTEN_CSS, LISTEN_JS, PROGRESS_JS, THEME_JS, WATCH_JS
 from app.filesystem import guess_mime, kind_of, list_dir, rel_of
 from app.icons import icon
 from app.media import MediaLibrary, media
@@ -66,7 +66,7 @@ class PlayerRoutes(BaseHandler):
                                          "chevron_left", "check", "queue", "shuffle", "gauge", "captions", "download")}
         self.send_html(doc_open(f"{p.stem} — Ma bibliothèque") + topbar(False) + page
                        + doc_close(f"window.WCFG = {js_json(cfg)}; window.WICO = {js_json(wico)}; "
-                                   f"{THEME_JS}{DECORATE_JS}{PROGRESS_JS}{WATCH_JS}"))
+                                   f"{THEME_JS}{DECORATE_JS}{HOVER_PREVIEW_JS}{PROGRESS_JS}{WATCH_JS}"))
 
     def page_listen(self, rel):
         p = config.paths.resolve(rel)

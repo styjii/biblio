@@ -4,7 +4,7 @@ from html import escape
 from urllib.parse import quote
 
 from app import config
-from app.assets import BROWSE_JS, DECORATE_JS, THEME_JS
+from app.assets import BROWSE_JS, DECORATE_JS, HOVER_PREVIEW_JS, THEME_JS
 from app.filesystem import card_kind, list_dir, rel_of
 from app.icons import ICONS, icon
 from app.templating import render
@@ -93,5 +93,5 @@ class BrowseRoutes(BaseHandler):
                "maxUpload": config.MAX_UPLOAD, "folder": relative.as_posix() if relative.parts else ""}
         icons_js = {n: icon(n, 22) for n in ICONS}
         parts.append(doc_close(f"window.FLCFG = {js_json(cfg)}; window.ICO = {js_json(icons_js)};"
-                               f"{THEME_JS}{DECORATE_JS}{BROWSE_JS}", after=lock_script()))
+                               f"{THEME_JS}{DECORATE_JS}{HOVER_PREVIEW_JS}{BROWSE_JS}", after=lock_script()))
         self.send_html("".join(parts))

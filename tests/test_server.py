@@ -215,6 +215,8 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(cfg["items"][2]["u"], "/watch?f=clip-c.mp4")
             self.assertEqual(cfg["download"], "/raw?dl=1&f=clip-b.mp4")      # le téléchargement est dans le menu des paramètres
             self.assertIn("window.WICO", page)
+            self.assertIn("video.pv", page)                                # la liste du lecteur a aussi l'aperçu au survol
+            self.assertIn("pointerover", page)
         finally:
             for name in ("clip-a.mp4", "clip-b.mp4", "clip-c.mp4"):
                 (lib / name).unlink()

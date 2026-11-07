@@ -33,6 +33,8 @@ THEME_INIT = asset("templates/partials/theme_init.html")
 ERROR_BACK_JS = asset("js/error-page.js")
 THEME_JS = asset("js/theme.js")
 DECORATE_JS = asset("js/decorate.js")
+# Aperçu vidéo au survol / à l'appui sur les vignettes (navigation et liste du lecteur vidéo)
+HOVER_PREVIEW_JS = asset("js/hover-preview.js")
 LOCK_JS = asset("js/lock.js")
 
 # Feuille de style commune

@@ -18,7 +18,7 @@ class FrontendJsTests(unittest.TestCase):
         scripts = {
             "worker d'envoi": assets.TRANSFER_WORKER_JS, "moteur d'envoi": assets.TRANSFER_ENGINE_JS,
             "panneau d'envoi": assets.TRANSFER_UI_JS, "progression": assets.PROGRESS_JS, "thème": assets.THEME_JS,
-            "cadenas": assets.LOCK_JS, "décoration": assets.DECORATE_JS, "lecteur vidéo": assets.WATCH_JS,
+            "cadenas": assets.LOCK_JS, "décoration": assets.DECORATE_JS, "aperçu au survol": assets.HOVER_PREVIEW_JS, "lecteur vidéo": assets.WATCH_JS,
             "lecteur audio": assets.LISTEN_JS, "navigation": assets.BROWSE_JS, "tableau de bord": assets.DASH_JS,
             "markdown": assets.MD_JS, "visionneuse": assets.VIEWER_JS, "aperçu": assets.PREVIEW_JS,
             "page d'erreur": assets.ERROR_BACK_JS,
