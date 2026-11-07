@@ -13,6 +13,12 @@ class PlaybackSettings {
     let volume = parseFloat(prefs.get('vol', '1'));
     if (!(volume >= 0 && volume <= 1)) volume = 1;
     video.volume = volume;
+    // iPhone / iPad : le volume est imposé par le système (écriture sans effet) : on retire alors le curseur, le bouton muet reste
+    const probe = volume > 0.5 ? 0.25 : 0.75;
+    video.volume = probe;
+    const adjustable = Math.abs(video.volume - probe) < 0.01;
+    video.volume = volume;
+    $('vp-volbox')?.classList.toggle('fixed', !adjustable);
     video.muted = prefs.get('muted', '0') === '1';
     video.defaultPlaybackRate = video.playbackRate = this.#rate;
 

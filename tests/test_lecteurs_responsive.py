@@ -30,6 +30,21 @@ class LecteurVideoTests(unittest.TestCase):
             self.assertIn(cls, assets.CSS)
 
 
+    def test_volume_jamais_masque(self):
+        """Le bouton muet et le curseur de volume ne sont masqués dans aucun mode (tactile, lecteur étroit, petit écran)."""
+        for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", assets.CSS):
+            if "display:none" not in body.replace(" ", ""):
+                continue
+            for part in (p.strip() for p in selector.split(",")):
+                self.assertNotIn(part, (".vp-vol", ".vp-vol .vp-b", "#vp-mute", "[data-act='mute']"), selector)
+        # curseur toujours visible en mode compact (pas de survol au doigt)
+        self.assertRegex(assets.CSS, r"@container vp \(max-width:640px\)\{[^@]*\.vp-vol \.vp-rng\{[^}]*opacity:1")
+        self.assertRegex(assets.CSS, r"@media\(pointer:coarse\)\{[^@]*\.vp-vol \.vp-rng\{[^}]*opacity:1")
+
+    def test_volume_impose_par_le_systeme(self):
+        self.assertIn("classList.toggle('fixed'", assets.WATCH_JS)         # iPhone : curseur retiré, bouton muet conservé
+
+
 class LecteurAudioTests(unittest.TestCase):
     css = assets.LISTEN_CSS
 

@@ -43,7 +43,7 @@
 .player.menu .vp-b[data-act='settings'] svg{transform:rotate(45deg)}
 .vp-time{margin-left:6px; font-size:13px; white-space:nowrap; font-variant-numeric:tabular-nums; text-shadow:0 1px 2px rgba(0,0,0,.6)}
 
-/* volume : le curseur se déploie au survol */
+/* volume : le curseur se déploie au survol (souris) ; en mode compact il reste affiché en permanence (voir plus bas), jamais masqué */
 .vp-vol{display:flex; align-items:center}
 .vp-rng{-webkit-appearance:none; appearance:none; width:0; height:22px; margin:0; padding:0; background:transparent; opacity:0; cursor:pointer; pointer-events:auto; --p:100%; transition:width .2s,opacity .2s,margin .2s}
 .vp-vol:hover .vp-rng,.vp-vol:focus-within .vp-rng,.vp-vol.peek .vp-rng{width:64px; margin:0 10px 0 2px; opacity:1}
@@ -64,7 +64,10 @@
 .player.busy .vp-mid .vp-b[data-act='play']{opacity:0}
 @media(pointer:coarse){
   .vp-mid{display:flex}
-  .vp-bar [data-act='play'],.vp-vol,.vp-nx,.vp-sk{display:none}
+  .vp-bar [data-act='play'],.vp-nx,.vp-sk{display:none}      /* le volume, lui, reste dans la barre */
+  .vp-vol .vp-rng{width:clamp(56px,10cqw,96px); height:32px; margin:0 8px 0 0; opacity:1}      /* pas de survol au doigt : curseur toujours visible */
+  .vp-rng::-webkit-slider-thumb{width:16px; height:16px; margin-top:-6.5px}
+  .vp-rng::-moz-range-thumb{width:16px; height:16px}
   .vp-seek{height:30px}
   .vp-rail{height:4px}
   .vp-thumb{transform:scale(1)}
@@ -126,7 +129,10 @@
   .vp-row{height:44px}
   .vp-b{width:38px; height:38px}
   .vp-b svg{width:22px; height:22px}
-  .vp-bar [data-act='play'],.vp-nx,.vp-sk,.vp-vol,.vp-mode{display:none}
+  .vp-bar [data-act='play'],.vp-nx,.vp-sk,.vp-mode{display:none}
+  .vp-vol .vp-rng{width:clamp(44px,15cqw,84px); height:32px; margin:0 6px 0 0; opacity:1}      /* bouton muet + curseur toujours visibles */
+  .vp-rng::-webkit-slider-thumb{width:16px; height:16px; margin-top:-6.5px}
+  .vp-rng::-moz-range-thumb{width:16px; height:16px}
   .vp-time{margin-left:4px; font-size:12.5px}
   .vp-desk{display:none}
   .vp-menu{left:8px; right:8px; bottom:8px; width:auto; max-height:calc(100% - 16px)}      /* petit lecteur : le menu couvre la barre, avec défilement si besoin */
@@ -140,6 +146,11 @@
   .vp-mid .vp-b[data-act='prev'] svg,.vp-mid .vp-b[data-act='next'] svg,.vp-mid .vp-skb svg{width:22px; height:22px}
   .vp-time{font-size:12px}
 }
+@container vp (max-width:300px){                  /* lecteur minuscule : le bouton muet reste, le curseur s'ouvre au toucher du bouton */
+  .vp-vol .vp-rng{width:0; margin:0; opacity:0}
+  .vp-vol:focus-within .vp-rng,.vp-vol.peek .vp-rng{width:56px; margin:0 6px 0 0; opacity:1}
+}
+.vp-vol.fixed .vp-rng{display:none}               /* appareil au volume imposé par le système (iPhone) : le curseur serait sans effet, le bouton muet reste */
 @container vp (min-width:641px) and (max-width:780px){.vp-time{font-size:12.5px}.vp-mode{display:none}}      /* lecteur moyen : aléatoire et répétition restent dans le menu */
 /* mode cinéma : seulement sur grand écran (la mise en page est dans 07-page-de-lecture-video.css) */
 @media(max-width:999px){.vp-desk{display:none}}

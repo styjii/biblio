@@ -160,7 +160,7 @@ class PlayerUI {
         fwd: () => this.skip(PlayerUI.SKIP),
         shuffle: () => this.#host.setShuffle(!this.#host.shuffle),
         repeat: () => this.#host.cycleRepeat(),
-        mute: () => this.#settings.toggleMute(),
+        mute: () => { this.#settings.toggleMute(); this.peekVolume(); },       // en très petit lecteur, le curseur s'ouvre un instant
         cc: () => this.toggleCaptions(),
         settings: () => this.#toggleMenu(),
         theater: () => this.toggleTheater(),
