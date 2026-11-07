@@ -30,6 +30,16 @@ class FrontendJsTests(unittest.TestCase):
                 result = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, f"{name} : {result.stderr[:400]}")
 
+    @unittest.skipUnless(shutil.which("node"), "Node.js n'est pas installé")
+    def test_chaque_fichier_est_valide_isolement(self):
+        """Éditeur et linter ouvrent les fichiers un par un : chacun doit être un JavaScript valide à lui seul."""
+        failures = []
+        for path in sorted(JS_DIR.rglob("*.js")):
+            result = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True)
+            if result.returncode != 0:
+                failures.append(f"{path.relative_to(HERE)} : {result.stderr.strip().splitlines()[0] if result.stderr.strip() else '?'}")
+        self.assertEqual(failures, [], "fichiers invalides isolément :\n" + "\n".join(failures[:20]))
+
     def test_aucune_syntaxe_ancienne(self):
         old_style = {
             "var": re.compile(r"^\s*var\s", re.M),

@@ -3,7 +3,9 @@
 Convention : un chemin qui désigne un dossier regroupe des fichiers `NN-nom` concaténés dans l'ordre
 alphabétique (un script découpé par sections, une feuille de style découpée par thèmes). Chaque bloc est
 précédé d'un saut de ligne, puis inséré tel quel dans la page (<style> / <script>) : aucune requête de
-plus pour le navigateur.
+plus pour le navigateur. Pour un dossier de scripts (`wrap=True`), le serveur enveloppe l'ensemble dans une
+fonction anonyme auto-appelée : les fichiers partagent une même portée sans rien exposer à la page, et chacun
+reste un fichier JavaScript valide pris isolément (éditeur, linter).
 """
 
 import gzip
@@ -14,11 +16,16 @@ from app import config
 FRONTEND_DIR = config.HERE / "frontend"
 
 
-def asset(rel):
-    """Contenu d'un fichier de frontend/ (ou des fichiers d'un dossier, dans l'ordre alphabétique)."""
+def asset(rel, wrap=False):
+    """Contenu d'un fichier de frontend/ (ou des fichiers d'un dossier, dans l'ordre alphabétique).
+
+    `wrap=True` (scripts d'un dossier) : l'ensemble est placé dans une fonction anonyme auto-appelée.
+    Seuls les fichiers .js et .css sont lus (un dossier peut contenir un jsconfig.json pour l'éditeur).
+    """
     path = FRONTEND_DIR / rel
-    files = sorted(p for p in path.iterdir() if p.is_file()) if path.is_dir() else [path]
-    return "\n" + "".join(p.read_text(encoding="utf-8") for p in files)
+    files = sorted(p for p in path.iterdir() if p.is_file() and p.suffix in (".js", ".css")) if path.is_dir() else [path]
+    body = "".join(p.read_text(encoding="utf-8") for p in files)
+    return f"\n(() => {{\n{body}}})();\n" if wrap else "\n" + body
 
 
 # Gabarits et scripts communs
@@ -41,16 +48,16 @@ TRANSFER_VERSION = hashlib.sha1(TRANSFER_WORKER_JS.encode("utf-8")).hexdigest()[
 PROGRESS_JS = asset("js/progress.js")
 
 # Pages
-BROWSE_JS = asset("js/browse")
+BROWSE_JS = asset("js/browse", wrap=True)
 VIEWER_JS = asset("js/viewer.js")
 PREVIEW_JS = asset("js/preview.js")
-WATCH_JS = asset("js/watch")
+WATCH_JS = asset("js/watch", wrap=True)
 MD_CSS = asset("css/markdown.css")
-MD_JS = asset("js/markdown")
+MD_JS = asset("js/markdown", wrap=True)
 DASH_CSS = asset("css/dashboard.css")
-DASH_JS = asset("js/dashboard")
+DASH_JS = asset("js/dashboard", wrap=True)
 LISTEN_CSS = asset("css/listen.css")
-LISTEN_JS = asset("js/listen")
+LISTEN_JS = asset("js/listen", wrap=True)
 
 
 class EditorBundle:

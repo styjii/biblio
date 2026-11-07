@@ -55,8 +55,9 @@ Les fichiers sont lus au démarrage (`app/assets.py`) puis insérés dans les pa
 aucune requête supplémentaire. Après une modification du front-end, relancer le serveur.
 
 - **Dossier de scripts/styles** (`js/browse/`, `css/main/`…) : les fichiers `NN-nom` sont concaténés dans l'ordre
-  alphabétique. Pour les scripts, ils forment *un seul bloc* (fonction anonyme) : `00-init.js` ouvre le bloc et
-  contient les variables partagées, le dernier fichier le referme.
+  alphabétique. Pour les scripts, ils forment *un seul bloc* : le serveur les enveloppe dans une fonction anonyme (`asset(..., wrap=True)`),
+  `00-init.js` contient les variables partagées. Chaque fichier reste un JavaScript valide pris isolément ;
+  le `jsconfig.json` du dossier indique à l'éditeur (tsserver) que ces fichiers forment un seul script.
 - **Gabarits** (`templates/*.html`), syntaxe volontairement minimale :
   - `{{ nom }}` : valeur insérée **telle quelle** (échapper avec `html.escape` côté Python tout ce qui vient d'un nom
     de fichier, d'un paramètre, etc.) ;

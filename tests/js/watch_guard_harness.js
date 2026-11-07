@@ -2,7 +2,8 @@
 // un faux élément <video> relié à un faux réseau et une horloge simulée, puis affiche le résultat de chaque scénario en JSON.
 const vm = require('vm'), fs = require('fs'), path = require('path');
 const dir = path.join(__dirname, '..', '..', 'frontend', 'js', 'watch');
-const code = '\n' + fs.readdirSync(dir).sort().map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('');
+// même enveloppe que app/assets.py (asset(..., wrap=True))
+const code = '\n(() => {\n' + fs.readdirSync(dir).filter((f) => f.endsWith('.js')).sort().map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('') + '})();\n';
 
 /** Page factice : horloge simulée, réseau coupé / rétabli à volonté, vidéo de 600 s. */
 function makeWorld({shuffle = false, startPaused = false} = {}) {
