@@ -11,6 +11,7 @@ function makeWorld({shuffle = false, startPaused = false} = {}) {
   let timers = [];
   let seq = 0;
   const net = {up: true, loads: 0};
+  const progressDone = [];                      // fichiers dont la position mémorisée a été effacée
   const listeners = (target) => {
     const map = {};
     target.addEventListener = (type, fn) => { (map[type] ??= []).push(fn); };
@@ -82,7 +83,7 @@ function makeWorld({shuffle = false, startPaused = false} = {}) {
     setTimeout: setTimeoutFake, clearTimeout: clearTimeoutFake, Date: {now: () => now}, JSON, Math, Number, Object, Array, Map, Promise, String, Set,
     localStorage: {getItem: () => null, setItem() {}, removeItem() {}}, sessionStorage: {getItem: () => null, setItem() {}},
     matchMedia: () => ({matches: false}), requestAnimationFrame: (fn) => setTimeoutFake(fn, 16), screen: {},
-    Progress: {get: async () => null, save() {}, done() {}, fmt: (s) => `${Math.floor(s)} s`},
+    Progress: {get: async () => null, save() {}, done(rel) { progressDone.push(rel); }, fmt: (s) => `${Math.floor(s)} s`},
   };
   ctx.addEventListener = win.addEventListener;      // le script écoute aussi bien `window.…` que les événements globaux
   win.WCFG = {key: 'k:a.mp4', folder: 'k:', index: 0, items: [{f: 'a.mp4', u: '/watch?f=a.mp4'}, {f: 'b.mp4', u: '/watch?f=b.mp4'}]};
@@ -116,7 +117,7 @@ function makeWorld({shuffle = false, startPaused = false} = {}) {
   /** Coupure réseau pendant la lecture : la mémoire tampon est vide, le lecteur attend des données. */
   const stall = () => { video.readyState = 1; video.emit('waiting'); };
   const settle = (ms) => advance(ms);
-  return {video, net, ctx, win, doc, advance, play, dropNetwork, restoreNetwork, stall, settle, msg: () => elements['w-msg'].textContent};
+  return {video, net, ctx, win, doc, advance, play, dropNetwork, restoreNetwork, stall, settle, progressDone, msg: () => elements['vp-toast'].textContent};
 }
 
 /** Lecture démarrée normalement jusqu'à `at` secondes. */
@@ -217,6 +218,51 @@ const out = {};
     w.video.emit('timeupdate');
   }
   out.fichier_abime = {loads: w.net.loads - before};
+}
+
+// 7b. Décodage impossible à une position précise (saut / reprise) mais possible un peu avant : la lecture repart 5 s plus tôt, sans boucle.
+{
+  const w = started(makeWorld(), 120);
+  const before = w.net.loads;
+  const origLoad = w.video.load.bind(w.video);
+  w.video.load = function () { origLoad(); };
+  w.video.error = {code: 3};
+  w.video.emit('error');
+  for (let i = 0; i < 6; i++) {
+    w.advance(3000);
+    if (w.video.currentTime >= 120) { w.video.error = {code: 3}; w.video.emit('error'); }      // la position 120 est « empoisonnée »
+  }
+  out.decodage_position_empoisonnee = {loads: w.net.loads - before, time: w.video.currentTime, paused: w.video.paused, error: !!w.video.error, forgotten: w.progressDone.length};
+}
+
+// 7c. Décodage impossible à plusieurs positions : repli jusqu'à 0:00 (position mémorisée effacée), la lecture y repart.
+{
+  const w = started(makeWorld(), 120);
+  const origLoad = w.video.load.bind(w.video);
+  w.video.load = function () { origLoad(); };
+  w.video.error = {code: 3};
+  w.video.emit('error');
+  for (let i = 0; i < 8; i++) {
+    w.advance(12000);                                                                           // (les délais entre essais s'allongent : 0, 2, 5, 10 s…)
+    if (w.video.currentTime > 0) { w.video.error = {code: 3}; w.video.emit('error'); }         // tout échoue sauf le départ
+  }
+  out.decodage_repli_au_debut = {time: w.video.currentTime, paused: w.video.paused, error: !!w.video.error, forgotten: w.progressDone.length};
+}
+
+// 7d. Échec partout, même au début : on s'arrête (pas de boucle), la position mémorisée est effacée, un clic sur la vidéo réessaie depuis 0:00.
+{
+  const w = started(makeWorld(), 120);
+  const before = w.net.loads;
+  const origLoad = w.video.load.bind(w.video);
+  w.video.load = function () { origLoad(); };
+  w.video.error = {code: 3};
+  w.video.emit('error');
+  for (let i = 0; i < 12; i++) { w.advance(20000); w.video.error = {code: 3}; w.video.emit('error'); }
+  const loadsAtStop = w.net.loads - before;
+  w.video.error = {code: 3}; w.video.emit('error');          // une dernière erreur : l'abandon est déjà prononcé, le message s'affiche
+  const msg = w.msg();
+  w.advance(60000);
+  out.decodage_impossible = {loads: loadsAtStop, loadsLater: w.net.loads - before, forgotten: w.progressDone.length, msg};
 }
 
 // 8. Page rouverte au premier plan alors que le lecteur est resté en erreur (réseau déjà revenu)

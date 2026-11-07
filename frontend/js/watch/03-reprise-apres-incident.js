@@ -8,7 +8,8 @@ class PlaybackGuard {
   static IDLE_ONLINE = 1500;                              // ms de silence du flux à partir desquels un retour du réseau relance la vidéo
   static IDLE_VISIBLE = 4000;                             // idem pour un retour sur la page
   static RETRY_DELAYS = [0, 2000, 5000, 10000, 15000];    // ms avant chaque rechargement ; le dernier délai se répète tant que la vidéo ne repart pas
-  static MAX_DECODE_RETRIES = 3;                          // fichier abîmé (erreur de décodage) : on n'insiste pas indéfiniment
+  static DECODE_BACKOFF = [0, 5, 15];                     // erreur de décodage : 1er essai à la même position, puis 5 s plus tôt, puis 15 s plus tôt, puis depuis 0:00
+                                                          // (un saut vers une position précise peut échouer alors que la lecture continue passe : on repart d'un point sûr)
 
   #good = 0;                                              // dernière position où la lecture était réellement en cours (ou visée par un saut)
   #wantPlay = false;                                      // la lecture était voulue (pas mise en pause par l'utilisateur)
@@ -78,6 +79,7 @@ class PlaybackGuard {
   }
 
   #onError() {
+    console.warn(`Lecture : erreur ${video.error?.code} (${video.error?.message || 'sans détail'}) à ${Progress.fmt(video.currentTime || 0)}`);   // pour le diagnostic (console du navigateur)
     if (video.error?.code === 4 && !this.#everLoaded && navigator.onLine !== false) return;   // format non pris en charge dès le départ : un rechargement n'y changerait rien
     this.#recover('Lecture interrompue.');
   }
@@ -132,10 +134,9 @@ class PlaybackGuard {
       on n'abandonne jamais, la lecture repart d'elle-même dès que le serveur répond de nouveau. */
   #recover(reason, now = false) {
     this.#clearStall();
-    if (video.error?.code === 3 && this.#retries >= PlaybackGuard.MAX_DECODE_RETRIES && navigator.onLine !== false) {
-      this.#recovering = false;                              // erreur de décodage qui revient au même endroit : le fichier lui-même est en cause
-      this.#restore = null;
-      say(`${reason} Recharge la page pour reprendre.`);
+    const decode = video.error?.code === 3 && navigator.onLine !== false;
+    if (decode && this.#retries > PlaybackGuard.DECODE_BACKOFF.length) {
+      this.#giveUp();                                        // même depuis le début : le fichier lui-même est en cause
       return;
     }
     if (this.#retryTimer && !now) return;                    // un rechargement est déjà programmé
@@ -146,11 +147,33 @@ class PlaybackGuard {
       this.#recoveredAt = this.#good;
       this.#restore = {position: this.#good, play: this.#wantPlay};
     }
+    if (decode && this.#retries > 0 && this.#restore) {
+      this.#restore.position = this.#fallbackPosition(this.#retries);
+      this.#good = this.#restore.position;                   // repli voulu : sans cela, « lecture » croirait la position perdue et ramènerait à l'endroit fautif
+    }
     const delays = PlaybackGuard.RETRY_DELAYS;
     const delay = now ? 0 : delays[Math.min(this.#retries, delays.length - 1)];
     this.#retries++;
-    say(`${reason} Reprise à ${Progress.fmt(this.#good)}…`);
+    say(`${reason} Reprise à ${Progress.fmt(this.#restore?.position ?? this.#good)}…`);
     this.#retryTimer = setTimeout(() => this.#reload(), delay);
+  }
+
+  /** Position de repli après `step` échecs de décodage : de plus en plus tôt, puis le début. Au début, la position mémorisée par le serveur
+      est effacée : sinon chaque rechargement de la page (même « hard refresh ») retournerait se heurter au même endroit. */
+  #fallbackPosition(step) {
+    const back = PlaybackGuard.DECODE_BACKOFF[step];
+    if (back !== undefined && this.#recoveredAt - back > 0) return this.#recoveredAt - back;
+    Progress.done(items[index].f);
+    return 0;
+  }
+
+  /** Plus rien à tenter : on s'arrête là, sans rechargements sans fin. Un clic sur la vidéo réessaie, depuis le début. */
+  #giveUp() {
+    this.#recovering = false;
+    this.#restore = null;
+    this.#good = 0;
+    Progress.done(items[index].f);                            // la position mémorisée est oubliée : le prochain chargement repart de 0:00
+    say('Cette vidéo ne peut pas être décodée par ce navigateur, même depuis le début. Clique sur la vidéo pour réessayer.');
   }
 
   #reload() {

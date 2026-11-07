@@ -47,6 +47,25 @@ class WatchGuardTests(unittest.TestCase):
     def test_fichier_abime_n_est_pas_recharge_indefiniment(self):
         self.assertLessEqual(self.r["fichier_abime"]["loads"], 4)
 
+    def test_decodage_impossible_a_la_position_memorisee_recule_puis_repart(self):
+        r = self.r["decodage_position_empoisonnee"]
+        self.assertLessEqual(r["loads"], 4)                          # pas de boucle de rechargements
+        self.assertEqual((r["paused"], r["error"]), (False, False))  # la lecture est repartie...
+        self.assertLess(r["time"], 120 + 30)                         # ...et continue après le point qui posait problème
+        self.assertEqual(r["forgotten"], 0)                          # position encore valable : on ne l'efface pas
+
+    def test_decodage_repli_jusqu_au_debut_efface_la_position(self):
+        r = self.r["decodage_repli_au_debut"]
+        self.assertEqual((r["paused"], r["error"]), (False, False))
+        self.assertGreaterEqual(r["forgotten"], 1)                   # sinon chaque rechargement de la page retournerait au même endroit
+
+    def test_decodage_impossible_partout_s_arrete_sans_boucle(self):
+        r = self.r["decodage_impossible"]
+        self.assertLessEqual(r["loads"], 4)
+        self.assertEqual(r["loads"], r["loadsLater"])                # plus aucun rechargement après l'abandon
+        self.assertGreaterEqual(r["forgotten"], 1)
+        self.assertIn("décodée", r["msg"])                           # message clair, plus « recharge la page » (inutile)
+
     def test_reprise_lente_n_est_jamais_rechargee(self):
         r = self.r["reprise_lente"]
         self.assertEqual(r["reloaded"], 0)                           # données au compte-gouttes : on attend, on ne repart pas de zéro
