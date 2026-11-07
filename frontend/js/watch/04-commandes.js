@@ -5,13 +5,16 @@ class VideoPlayer {
   #settings = new PlaybackSettings();
   #resume = new ResumeTracker();
   #ui;
+  #guard;
+  #switching = false;                                    // une vidéo est en train d'être chargée sur place : les clics suivants sont ignorés
+  #historyBound = false;
   #autoNext = prefs.get('autonext', '1') !== '0';        // lecture automatique : enchaîner la vidéo suivante à la fin
   #shuffle = prefs.get('shuffle', '0') === '1';
   #pendingUrl = null;                                    // vidéo à ouvrir dès que le réseau revient
   #repeat = ['off', 'all', 'one'].includes(prefs.get('repeat', 'off')) ? prefs.get('repeat', 'off') : 'off';   // off | all | one
 
   constructor() {
-    new PlaybackGuard();                                   // s'abonne seul aux événements de la vidéo (reprise après coupure)
+    this.#guard = new PlaybackGuard();                     // s'abonne seul aux événements de la vidéo (reprise après coupure)
     video.addEventListener('ended', () => this.#onEnded());
     this.#ui = new PlayerUI(this.#settings, this);
 
@@ -24,10 +27,76 @@ class VideoPlayer {
   }
 
   /* ----- enchaînement ----- */
+  /** Le plein écran est-il actif ? (API standard, préfixe WebKit, ou plein écran natif du lecteur d'iOS) */
+  #isFullscreen() {
+    return Boolean(document.fullscreenElement || document.webkitFullscreenElement || video.webkitDisplayingFullscreen);
+  }
+
   #goto(target) {
+    if (this.#switching) return;
     this.#order.save(target);
+    if (!this.#isFullscreen()) return this.#leaveTo(target);
+    // Plein écran : ouvrir une autre page le fermerait, et le navigateur interdit de le rouvrir sans geste de l'utilisateur.
+    // La vidéo suivante est donc chargée dans le même lecteur, qui reste en plein écran. En cas d'échec : navigation classique.
+    this.#switching = true;
+    this.#loadInPlace(target).catch(() => this.#leaveTo(target)).finally(() => { this.#switching = false; });
+  }
+
+  #leaveTo(target) {
     if (window.Transfers) window.Transfers.open(items[target].u);     // pendant un envoi, nouvel onglet : l'envoi n'est pas interrompu
     else this.#navigate(items[target].u);
+  }
+
+  /** Charge une autre vidéo sans changer de page : on lit d'abord sa page (titre, sous-titres, adresse du fichier), puis on remplace
+      la source du lecteur. Tant que la page n'est pas reçue et vérifiée, rien n'est modifié (l'échec se rattrape par une navigation). */
+  async #loadInPlace(target) {
+    const item = items[target];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    let html;
+    try {
+      const response = await fetch(item.u, {credentials: 'same-origin', signal: controller.signal});
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      html = await response.text();
+    } finally {
+      clearTimeout(timeout);
+    }
+    const page = new DOMParser().parseFromString(html, 'text/html');
+    const source = page.getElementById('player')?.getAttribute('src');
+    const fresh = JSON.parse(html.match(/window\.WCFG = (\{.*?\}); window\.WICO/s)?.[1] ?? 'null');
+    if (!source || fresh?.items?.[fresh.index]?.f !== item.f) throw new Error('page inattendue');   // page de connexion, dossier modifié…
+
+    this.#resume.leave();                                  // position de la vidéo qu'on quitte, avant tout changement
+    index = fresh.index;
+    cfg.key = fresh.key;
+    cfg.download = fresh.download;
+    this.#applyPage(page);
+    this.#guard.reset();
+    this.#resume.reset();
+    this.#order.restore(this.#shuffle);                    // l'ordre (dans l'ordre ou mélangé) se poursuit depuis la nouvelle vidéo
+    video.src = source;                                    // le plein écran reste sur le même élément : il n'est jamais fermé
+    this.#ui.reload();
+    play();
+    history.pushState(null, '', item.u);                   // l'adresse de la page suit la vidéo (partage, rechargement)
+    if (!this.#historyBound) {
+      this.#historyBound = true;
+      window.addEventListener('popstate', () => location.reload());       // « précédent » du navigateur : on recharge la vidéo de l'adresse
+    }
+  }
+
+  /** Reporte sur la page ouverte ce qui change d'une vidéo à l'autre : titre, informations, sous-titres, vidéo en cours dans la liste. */
+  #applyPage(page) {
+    video.querySelectorAll('track').forEach((track) => track.remove());
+    for (const track of page.querySelectorAll('#player track')) video.append(document.importNode(track, true));
+    const title = page.querySelector('.vtitle')?.textContent ?? '';
+    document.querySelector('.vtitle').textContent = title;
+    document.querySelector('.vp-top').textContent = title;
+    document.querySelector('.chips').innerHTML = page.querySelector('.chips')?.innerHTML ?? '';
+    document.title = page.title;
+    const current = page.querySelector('.list .row.cur')?.dataset.f;
+    document.querySelectorAll('.list .row').forEach((row) => row.classList.toggle('cur', row.dataset.f === current));
+    document.querySelector('.list .row.cur')?.scrollIntoView({block: 'nearest'});
+    this.#updateMediaTitle(title);
   }
 
   /** Ouvre la page d'une vidéo ; hors connexion, attend le retour du réseau (sinon le navigateur afficherait sa page d'erreur et la liste de lecture serait perdue). */
@@ -141,11 +210,14 @@ class VideoPlayer {
   }
 
   /** Touches multimédia du téléphone / du clavier et écran de verrouillage. */
+  #updateMediaTitle(title) {
+    if (!('mediaSession' in navigator)) return;
+    try { navigator.mediaSession.metadata = new MediaMetadata({title}); } catch { /* titre non affiché sur l'écran de verrouillage */ }
+  }
+
   #setupMediaSession() {
     if (!('mediaSession' in navigator)) return;
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({title: document.querySelector('.vtitle')?.textContent ?? document.title});
-    } catch { /* titre non affiché sur l'écran de verrouillage */ }
+    this.#updateMediaTitle(document.querySelector('.vtitle')?.textContent ?? document.title);
     const handlers = {
       previoustrack: () => this.previous(),
       nexttrack: () => this.next(),

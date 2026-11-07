@@ -47,6 +47,22 @@ class PlaybackGuard {
 
   #alive() { this.#lastData = Date.now(); }
 
+  /** Autre vidéo chargée dans le même lecteur : on oublie tout de la précédente (position, reprises en cours, erreurs). */
+  reset() {
+    this.#clearStall();
+    clearTimeout(this.#retryTimer);
+    this.#retryTimer = 0;
+    this.#good = 0;
+    this.#wantPlay = true;                                  // la nouvelle vidéo démarre d'elle-même
+    this.#finished = false;
+    this.#everLoaded = false;
+    this.#recovering = false;
+    this.#restore = null;
+    this.#retries = 0;
+    this.#recoveredAt = 0;
+    this.#alive();
+  }
+
   #onMetadata() {
     this.#everLoaded = true;
     this.#alive();

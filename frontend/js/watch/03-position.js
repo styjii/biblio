@@ -3,7 +3,7 @@
 class ResumeTracker {
   static SAVE_EVERY = 5000;                               // ms entre deux enregistrements pendant la lecture
 
-  #rel = items[index].f;
+  get #rel() { return items[index].f; }                   // la vidéo ouverte (peut changer : voir leave / reset)
   #resume = null;                                         // position mémorisée {t, d}
   #fetched = false;
   #resumed = false;                                       // à partir d'ici seulement, on peut enregistrer sans écraser la position mémorisée
@@ -51,6 +51,18 @@ class ResumeTracker {
     if (!this.#resumed || !video.duration || video.ended) return;
     if (video.currentTime > video.duration - 8) Progress.done(this.#rel);      // presque fini : on repartira du début
     else Progress.save(this.#rel, video.currentTime, video.duration, keepalive);
+  }
+
+  /** On quitte cette vidéo sans changer de page (plein écran conservé) : sa position est enregistrée une dernière fois. */
+  leave() { this.save(); }
+
+  /** Autre vidéo chargée dans le même lecteur : on repart de zéro (position mémorisée de la nouvelle vidéo, reprise à ses métadonnées). */
+  reset() {
+    this.#resume = null;
+    this.#fetched = false;
+    this.#resumed = false;                                  // tant que la reprise n'est pas faite, rien n'est enregistré (l'ancienne position n'est pas écrasée)
+    this.#lastSave = 0;
+    this.#load();
   }
 
   /** Lue jusqu'au bout : on oublie la position. */

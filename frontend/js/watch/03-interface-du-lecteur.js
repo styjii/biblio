@@ -464,6 +464,17 @@ class PlayerUI {
     (rows[focused] ?? rows[0])?.focus({preventScroll: true});
   }
 
+  /** Autre vidéo chargée dans le même lecteur (plein écran conservé) : sous-titres relus, menu fermé, barre affichée un instant. */
+  reload() {
+    this.#closeMenu();
+    this.#tracks = [...(video.textTracks ?? [])];
+    this.#active = null;
+    this.#cap.replaceChildren();
+    this.#lastSecond = -1;
+    this.#bindCaptions();
+    this.#poke();
+  }
+
   /* ----- sous-titres : dessinés par le script, au-dessus de la barre de commandes ----- */
   #bindCaptions() {
     $('vp-cc').hidden = !this.#tracks.length;

@@ -1,7 +1,8 @@
 /* Lecteur vidéo : ordre de lecture, volume et vitesse, reprise de la position, boutons et clavier.
    Les fichiers de ce dossier forment un seul script (concaténés dans l'ordre) : le serveur les enveloppe dans une fonction anonyme (portée commune, voir app/assets.py). */
 const cfg = window.WCFG;
-const {items, index} = cfg;                              // vidéos du dossier [{f: chemin, u: adresse}], position de la vidéo ouverte
+const {items} = cfg;                                     // vidéos du dossier [{f: chemin, u: adresse}]
+let {index} = cfg;                                       // position de la vidéo ouverte (change quand la vidéo suivante est chargée sur place, en plein écran)
 const icons = window.WICO ?? {};
 const $ = (id) => document.getElementById(id);
 const video = $('player');
