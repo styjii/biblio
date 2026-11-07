@@ -36,7 +36,9 @@ function makeWorld({shuffle = false, startPaused = false} = {}) {
 
   const element = () => {
     const el = {textContent: '', innerHTML: '', value: '', checked: true, dataset: {}, style: {setProperty() {}},
-      classList: {toggle() {}, add() {}, remove() {}}, setAttribute() {}, blur() {}, focus() {}};
+      classList: {toggle() {}, add() {}, remove() {}, contains: () => false}, setAttribute() {}, blur() {}, focus() {},
+      querySelector: () => null, querySelectorAll: () => [], append() {}, replaceChildren() {}, closest: () => null,
+      getBoundingClientRect: () => ({left: 0, top: 0, width: 640, height: 360}), offsetWidth: 40, hidden: false};
     listeners(el);
     return el;
   };
@@ -65,9 +67,11 @@ function makeWorld({shuffle = false, startPaused = false} = {}) {
       }, 50);
     },
   });
+  Object.assign(video, {textTracks: [], buffered: {length: 0}, controls: true});
+  video.parentElement = {offsetHeight: 225};
   elements.player = video;
-  const doc = {visibilityState: 'visible', fullscreenElement: null,
-    getElementById: (id) => (elements[id] ??= element()), querySelector: () => null};
+  const doc = {visibilityState: 'visible', fullscreenElement: null, documentElement: {style: {setProperty() {}}},
+    getElementById: (id) => (elements[id] ??= element()), querySelector: () => null, createElement: () => element()};
   listeners(doc);
 
   const win = {};
@@ -76,6 +80,7 @@ function makeWorld({shuffle = false, startPaused = false} = {}) {
     window: win, document: doc, navigator: {onLine: true}, location: {href: '/watch?f=a.mp4'}, innerWidth: 500,
     setTimeout: setTimeoutFake, clearTimeout: clearTimeoutFake, Date: {now: () => now}, JSON, Math, Number, Object, Array, Map, Promise, String, Set,
     localStorage: {getItem: () => null, setItem() {}, removeItem() {}}, sessionStorage: {getItem: () => null, setItem() {}},
+    matchMedia: () => ({matches: false}), requestAnimationFrame: (fn) => setTimeoutFake(fn, 16), screen: {},
     Progress: {get: async () => null, save() {}, done() {}, fmt: (s) => `${Math.floor(s)} s`},
   };
   ctx.addEventListener = win.addEventListener;      // le script écoute aussi bien `window.…` que les événements globaux

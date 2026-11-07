@@ -195,7 +195,8 @@ class ServerTests(unittest.TestCase):
         try:
             status, page = self.get("/watch?f=clip-b.mp4")
             self.assertEqual(status, 200)
-            for ident in ("w-prev", "w-next", "w-back", "w-fwd", "w-shuffle", "w-repeat", "w-rate", "w-mute", "w-vol", "w-msg"):
+            for ident in ("w-prev", "w-next", "w-back", "w-fwd", "w-shuffle", "w-repeat",
+                          "vbox", "vp-ui", "vp-seek", "vp-mute", "vp-vol", "vp-menu", "vp-toast", "vp-set", "vp-fs"):
                 self.assertIn(f"id='{ident}'", page)
             self.assertNotIn("class='btn'", page)                     # plus de liens « Précédente / Suivante » figés
             found = re.search(r"window\.WCFG = (\{.*?\});", page)

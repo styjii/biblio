@@ -13,13 +13,13 @@
     set(key, value) { try { localStorage.setItem(`vl:${key}`, value); } catch { /* préférence non mémorisée */ } },
   };
 
-  /** Message court sous les commandes (s'efface seul). */
+  /** Message court affiché en haut du lecteur, donc visible aussi en plein écran (s'efface seul). */
   const say = (() => {
     let timer = 0;
     return (text = '') => {
       clearTimeout(timer);
-      $('w-msg').textContent = text;
-      if (text) timer = setTimeout(() => { $('w-msg').textContent = ''; }, 4000);
+      $('vp-toast').textContent = text;
+      if (text) timer = setTimeout(() => { $('vp-toast').textContent = ''; }, 3500);
     };
   })();
 

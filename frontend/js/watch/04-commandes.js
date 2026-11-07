@@ -5,6 +5,7 @@
     #settings = new PlaybackSettings();
     #resume = new ResumeTracker();
     #guard = new PlaybackGuard();
+    #ui;
     #autoNext = $('autonext');
     #shuffle = prefs.get('shuffle', '0') === '1';
     #pendingUrl = null;                                    // vidéo à ouvrir dès que le réseau revient
@@ -14,19 +15,30 @@
       this.#autoNext.checked = prefs.get('autonext', '1') !== '0';
       this.#autoNext.addEventListener('change', () => prefs.set('autonext', this.#autoNext.checked ? '1' : '0'));
       video.addEventListener('ended', () => this.#onEnded());
+      this.#ui = new PlayerUI(this.#settings, this);
 
       $('w-prev').addEventListener('click', () => this.previous());
       $('w-next').addEventListener('click', () => this.next());
-      $('w-back').addEventListener('click', () => seekBy(-10));
-      $('w-fwd').addEventListener('click', () => seekBy(10));
+      $('w-back').addEventListener('click', () => this.#ui.skip(-10));
+      $('w-fwd').addEventListener('click', () => this.#ui.skip(10));
       $('w-shuffle').addEventListener('click', () => this.setShuffle(!this.#shuffle));
       $('w-repeat').addEventListener('click', () => this.cycleRepeat());
       document.addEventListener('keydown', (e) => this.#onKey(e));
       this.#setupMediaSession();
+      this.#pinControls();
 
       if (innerWidth >= 1000) document.querySelector('.row.cur')?.scrollIntoView({block: 'nearest'});
       this.#order.restore(this.#shuffle);
       this.#renderModes();
+    }
+
+    /** Mobile : les commandes restent collées juste sous le lecteur ; leur position dépend de la hauteur réelle de la vidéo. */
+    #pinControls() {
+      const box = video.parentElement;
+      const sync = () => document.documentElement.style.setProperty('--ph', `${box.offsetHeight}px`);
+      sync();
+      if (typeof ResizeObserver === 'function') new ResizeObserver(sync).observe(box);
+      else window.addEventListener('resize', sync);
     }
 
     /* ----- enchaînement ----- */
@@ -107,35 +119,36 @@
       const {key} = e;
       const lower = key.toLowerCase();
       if (tag === 'button' && (key === ' ' || key === 'Enter')) return;
-      const onPlayer = e.target === video;
+      if (e.target.closest?.('.vp-menu')) return;            // dans le menu des paramètres, les flèches parcourent les choix
       // le curseur de volume garde ses flèches natives
-      if (e.target.id === 'w-vol' && key.startsWith('Arrow')) return;
+      if (e.target.id === 'vp-vol' && key.startsWith('Arrow')) return;
 
+      const volume = (delta) => { this.#settings.setVolume(this.#settings.volume + delta); this.#ui.peekVolume(); };
       const actions = {
-        k: () => (video.paused ? play() : video.pause()),
-        j: () => seekBy(-10),
-        l: () => seekBy(10),
+        k: () => this.#ui.toggle(),
+        ' ': () => this.#ui.toggle(),
+        j: () => this.#ui.skip(-10),
+        l: () => this.#ui.skip(10),
+        ArrowLeft: () => this.#ui.skip(-5),
+        ArrowRight: () => this.#ui.skip(5),
+        ArrowUp: () => volume(0.05),
+        ArrowDown: () => volume(-0.05),
+        Home: () => this.#ui.jumpTo(0),
         n: () => this.next(),
         p: () => this.previous(),
         s: () => this.setShuffle(!this.#shuffle),
         r: () => this.cycleRepeat(),
-        m: () => this.#settings.toggleMute(),
-        f: () => (document.fullscreenElement ? document.exitFullscreen() : video.requestFullscreen?.()),
+        m: () => { this.#settings.toggleMute(); this.#ui.peekVolume(); },
+        f: () => this.#ui.toggleFullscreen(),
+        t: () => this.#ui.toggleTheater(),
+        i: () => this.#ui.togglePip(),
+        c: () => this.#ui.toggleCaptions(),
         '<': () => this.#settings.stepRate(-1),
         ',': () => this.#settings.stepRate(-1),
         '>': () => this.#settings.stepRate(1),
         '.': () => this.#settings.stepRate(1),
       };
-      // flèches et espace : le lecteur natif les gère déjà quand il a le focus
-      if (!onPlayer) {
-        Object.assign(actions, {
-          ' ': actions.k,
-          ArrowLeft: () => seekBy(-5),
-          ArrowRight: () => seekBy(5),
-          ArrowUp: () => this.#settings.setVolume(this.#settings.volume + 0.05),
-          ArrowDown: () => this.#settings.setVolume(this.#settings.volume - 0.05),
-        });
-      }
+      for (let digit = 0; digit <= 9; digit++) actions[String(digit)] = () => this.#ui.jumpTo(digit / 10);     // 0 à 9 : 0 % à 90 % de la vidéo
       const action = actions[key] ?? actions[lower];
       if (!action) return;
       action();
@@ -145,11 +158,14 @@
     /** Touches multimédia du téléphone / du clavier et écran de verrouillage. */
     #setupMediaSession() {
       if (!('mediaSession' in navigator)) return;
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({title: document.querySelector('.vtitle')?.textContent ?? document.title});
+      } catch { /* titre non affiché sur l'écran de verrouillage */ }
       const handlers = {
         previoustrack: () => this.previous(),
         nexttrack: () => this.next(),
-        seekbackward: ({seekOffset} = {}) => seekBy(-(seekOffset || 10)),
-        seekforward: ({seekOffset} = {}) => seekBy(seekOffset || 10),
+        seekbackward: ({seekOffset} = {}) => this.#ui.skip(-(seekOffset || 10)),
+        seekforward: ({seekOffset} = {}) => this.#ui.skip(seekOffset || 10),
       };
       for (const [name, handler] of Object.entries(handlers)) {
         try { navigator.mediaSession.setActionHandler(name, handler); } catch { /* action non prise en charge */ }

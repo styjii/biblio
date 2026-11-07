@@ -61,7 +61,8 @@ class PlayerRoutes(BaseHandler):
                       sub_chips=sub_chips, rows="".join(video_row(v, p) for v in siblings))
         cfg = {"key": f"{config.ROOT_ID}:{rel_of(p)}", "folder": f"{config.ROOT_ID}:{rel_of(p.parent)}",
                "index": idx, "items": [{"f": rel_of(x), "u": watch_url(x)} for x in siblings]}
-        wico = {n: icon(n, 24) for n in ("repeat", "repeat1", "volume", "mute")}
+        wico = {n: icon(n, 24) for n in ("repeat", "repeat1", "volume", "mute", "play", "pause", "replay", "expand", "shrink",
+                                         "chevron_left", "check")}
         self.send_html(doc_open(f"{p.stem} — Ma bibliothèque") + topbar(False) + page
                        + doc_close(f"window.WCFG = {js_json(cfg)}; window.WICO = {js_json(wico)}; "
                                    f"{THEME_JS}{DECORATE_JS}{PROGRESS_JS}{WATCH_JS}"))

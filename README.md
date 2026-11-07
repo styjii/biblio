@@ -65,6 +65,26 @@ aucune requête supplémentaire. Après une modification du front-end, relancer 
   Les sauts de ligne et l'indentation sont supprimés au rendu : on écrit un gabarit lisible sans changer le HTML.
   Pour garder une espace entre deux éléments, la mettre sur la même ligne.
 
+### Lecteur vidéo (`/watch`)
+
+Lecteur façon YouTube : les commandes natives du navigateur sont remplacées par une interface dessinée par
+`frontend/js/watch/03-interface-du-lecteur.js` (classe `PlayerUI`) et `frontend/css/main/12-lecteur-youtube.css`.
+Sans JavaScript, l'attribut `controls` de la balise `<video>` garde les commandes natives.
+
+- **Commandes** : lecture/pause, vidéo suivante, volume, durée, sous-titres (CC), paramètres (vitesse de 0,25× à 2×,
+  sous-titres, lecture automatique), mode cinéma (grand écran), image dans l'image, plein écran.
+- **Barre de position** : plage chargée, bulle de temps au survol, glissement à la souris ou au doigt, redessinée à
+  chaque image pendant la lecture. Les commandes se masquent après 3 s en lecture et réapparaissent au mouvement.
+- **Tactile** : tape = afficher/masquer les commandes, double tape à gauche/droite = ∓10 s (les sauts s'additionnent),
+  double tape au centre = lecture/pause ; gros boutons précédente / lecture / suivante au centre.
+- **Clavier** : `K`/espace, `J`/`L` ±10 s, flèches ±5 s et volume, `0`–`9` (0–90 %), `N`/`P`, `S`, `R`, `<`/`>`,
+  `M`, `C`, `T`, `I`, `F`.
+- **Responsive** : la taille des commandes suit la largeur du lecteur (requêtes de conteneur), donc aussi en plein
+  écran ; le plein écran est celui du conteneur (la vidéo *et* ses commandes). La couleur de la barre de position est la
+  variable `--vp-accent` (`12-lecteur-youtube.css`).
+- `PlaybackGuard` (`03-reprise-apres-incident.js`) reprend la lecture après une coupure du réseau ; `ResumeTracker`
+  (`03-position.js`) mémorise la position côté serveur.
+
 ### Ajouter ou modifier une page
 
 1. Écrire le gabarit dans `frontend/templates/…` ; le CSS/JS associé dans `frontend/css`, `frontend/js`.
