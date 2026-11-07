@@ -6,7 +6,8 @@
 .player{--vp-accent:#ff2e4d; --vp-btn:42px; --vp-bar:48px; color:#fff; -webkit-user-select:none; user-select:none; touch-action:manipulation}
 .player:not(.vp-on) :is(.vp-ui,.vp-cap,.vp-fx,.vp-spin,.vp-toast,.vp-seekfx){display:none}
 .player.vp-on video{cursor:pointer}
-.player.vp-on.ui-off:not(.paused){cursor:none}
+/* curseur masqué après un moment sans mouvement de la souris (classe posée par le script, tout le lecteur : image, commandes, barre) */
+.player.vp-on.cursor-off,.player.vp-on.cursor-off *{cursor:none!important}
 .vp-ui,.vp-cap,.vp-fx,.vp-spin,.vp-toast,.vp-seekfx{position:absolute; pointer-events:none}
 
 /* couche des commandes */

@@ -2,12 +2,17 @@
 /** Interface du lecteur façon YouTube : barre de commandes qui se masque, position (plage chargée, survol, glissement),
     précédente / suivante, ±10 s, aléatoire, répétition, volume, plein écran, mode cinéma, image dans l'image, et menu des
     paramètres (lecture automatique, aléatoire, répétition, vitesse, sous-titres, téléchargement), gestes tactiles
-    (tape = commandes, double tape sur les côtés = ±10 s). Aucune commande n'est placée hors du lecteur.
+    (tape = commandes, double tape sur les côtés = ±10 s), orientation du plein écran (automatique selon la vidéo,
+    paysage ou portrait), masquage du curseur de la souris après un moment d'inactivité.
+    Aucune commande n'est placée hors du lecteur.
     Sans ce script, les commandes natives restent. */
 class PlayerUI {
   static HIDE_AFTER = 3000;                              // ms sans activité avant de masquer les commandes (pendant la lecture)
   static SKIP = 10;                                      // s : double tape sur un côté de l'image
   static DOUBLE_TAP = 300;                               // ms entre deux tapes d'un double tape
+  static CURSOR_HIDE_AFTER = 3000;                       // ms sans mouvement de la souris avant de masquer le curseur
+  static ORIENTATIONS = ['auto', 'landscape', 'portrait'];
+  static ORIENTATION_LABELS = {auto: 'Automatique', landscape: 'Paysage', portrait: 'Portrait'};
 
   #box = $('vbox');
   #page = $('watch');
@@ -20,6 +25,8 @@ class PlayerUI {
   #settings;
   #host;
   #hideTimer = 0;
+  #cursorTimer = 0;
+  #orientation = 'auto';                                 // auto : suit la forme de la vidéo ; sinon verrouillage paysage / portrait
   #raf = 0;
   #overBar = false;
   #dragging = false;
@@ -42,9 +49,11 @@ class PlayerUI {
     this.#bindSeekBar();
     this.#bindGestures();
     this.#bindAutoHide();
+    this.#bindCursor();
     this.#bindMenu();
     this.#bindCaptions();
     this.#bindScreen();
+    this.#bindOrientation();
     this.#renderPlay();
     this.#renderBusy();
     this.#renderProgress();
@@ -84,11 +93,12 @@ class PlayerUI {
     try {
       if (this.#box.requestFullscreen) {
         await this.#box.requestFullscreen({navigationUI: 'hide'});
-        if (matchMedia('(pointer:coarse)').matches) await screen.orientation?.lock?.('landscape');      // téléphone : paysage
       } else if (this.#box.webkitRequestFullscreen) this.#box.webkitRequestFullscreen();
       else video.webkitEnterFullscreen?.();              // iPhone : plein écran natif de la vidéo (sans nos commandes)
-    } catch { /* plein écran refusé ou orientation non verrouillable : sans conséquence */ }
+    } catch { /* plein écran refusé : sans conséquence */ }
   }
+
+  get #fullscreen() { return (document.fullscreenElement ?? document.webkitFullscreenElement) === this.#box; }
 
   toggleTheater(force) {
     const on = force ?? !this.#page.classList.contains('theater');
@@ -344,6 +354,23 @@ class PlayerUI {
     });
   }
 
+  /* ----- masquage automatique du curseur de la souris ----- */
+  /** Sans mouvement de la souris pendant CURSOR_HIDE_AFTER sur le lecteur, le curseur disparaît ; il revient dès qu'elle bouge.
+      Indépendant des commandes : il s'applique aussi en pause et au-dessus de la barre. Le tactile n'est pas concerné. */
+  #bindCursor() {
+    const box = this.#box;
+    const wake = () => {
+      box.classList.remove('cursor-off');
+      clearTimeout(this.#cursorTimer);
+      this.#cursorTimer = setTimeout(() => box.classList.add('cursor-off'), PlayerUI.CURSOR_HIDE_AFTER);
+    };
+    const stop = () => { clearTimeout(this.#cursorTimer); box.classList.remove('cursor-off'); };
+    box.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') wake(); });
+    box.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') wake(); });
+    box.addEventListener('pointerleave', stop);          // la souris quitte le lecteur : curseur normal ailleurs
+    document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
+  }
+
   /* ----- masquage automatique des commandes ----- */
   #bindAutoHide() {
     const box = this.#box;
@@ -388,7 +415,7 @@ class PlayerUI {
   #toggleMenu() { if (this.#menu.hidden) this.#openMenu(); else this.#closeMenu(); }
 
   #openMenu(panel = 'root') {
-    this.#panel = panel;
+    this.#panel = panel === 'orient' && !this.#fullscreen ? 'root' : panel;
     this.#menu.hidden = false;
     this.#box.classList.add('menu');
     $('vp-set').setAttribute('aria-expanded', 'true');
@@ -446,6 +473,11 @@ class PlayerUI {
       row('Sous-titres', {header: true, onClick: () => this.#openMenu('root')});
       row('Désactivés', {checked: !this.#active, onClick: () => { this.#selectTrack(-1, true); this.#closeMenu(); }});
       this.#tracks.forEach((track, i) => row(track.label || `Piste ${i + 1}`, {checked: track === this.#active, onClick: () => { this.#selectTrack(i, true); this.#closeMenu(); }}));
+    } else if (this.#panel === 'orient') {
+      row('Orientation du plein écran', {header: true, onClick: () => this.#openMenu('root')});
+      for (const mode of PlayerUI.ORIENTATIONS) {
+        row(PlayerUI.ORIENTATION_LABELS[mode], {checked: mode === this.#orientation, onClick: () => { this.#setOrientation(mode); this.#closeMenu(); }});
+      }
     } else if (this.#panel === 'repeat') {
       row('Répétition', {header: true, onClick: () => this.#openMenu('root')});
       for (const mode of ['off', 'all', 'one']) {
@@ -457,6 +489,10 @@ class PlayerUI {
       row('Lecture aléatoire', {icon: ic('shuffle'), toggle: {on: host.shuffle}, onClick: () => host.setShuffle(!host.shuffle)});
       row('Répétition', {icon: ic('repeat'), value: repeatLabel[host.repeat], onClick: () => this.#openMenu('repeat')});
       row('Vitesse de lecture', {icon: ic('gauge'), value: rateLabel(this.#settings.rate), onClick: () => this.#openMenu('speed')});
+      if (this.#fullscreen) {                            // pas de sens hors plein écran : le navigateur n'autorise le verrouillage qu'en plein écran
+        const label = PlayerUI.ORIENTATION_LABELS[this.#orientation];
+        row('Orientation', {icon: ic('orientation'), value: this.#orientation === 'auto' ? `${label} (${this.#wantedOrientation() === 'portrait' ? 'portrait' : 'paysage'})` : label, onClick: () => this.#openMenu('orient')});
+      }
       if (this.#tracks.length) row('Sous-titres', {icon: ic('captions'), value: this.#active?.label || 'Désactivés', onClick: () => this.#openMenu('subs')});
       row('Télécharger la vidéo', {icon: ic('download'), onClick: () => { this.#closeMenu(); this.download(); }});
     }
@@ -505,6 +541,39 @@ class PlayerUI {
     this.#cap.replaceChildren(...lines);
   }
 
+  /* ----- orientation du plein écran ----- */
+  /** Orientation à verrouiller : paysage ou portrait si choisi, sinon celle de la vidéo (largeur ≥ hauteur : paysage).
+      Tant que la forme de la vidéo est inconnue (métadonnées pas encore lues), on part sur paysage. */
+  #wantedOrientation() {
+    if (this.#orientation !== 'auto') return this.#orientation;
+    return video.videoWidth && video.videoHeight && video.videoHeight > video.videoWidth ? 'portrait' : 'landscape';
+  }
+
+  /** Verrouille l'orientation de l'écran (plein écran seulement ; l'API l'exige). `announce` : message si c'est impossible. */
+  async #applyOrientation(announce = false) {
+    if (!this.#fullscreen) return;
+    if (!screen.orientation?.lock) { if (announce) say("Orientation non modifiable sur cet appareil."); return; }
+    try {
+      await screen.orientation.lock(this.#wantedOrientation());
+    } catch {                                            // ordinateur, iPhone, navigateur sans verrouillage : on le dit, sans bloquer la lecture
+      if (announce) say("Orientation non modifiable sur cet appareil.");
+    }
+  }
+
+  #setOrientation(mode) {
+    if (!PlayerUI.ORIENTATIONS.includes(mode)) return;
+    this.#orientation = mode;
+    prefs.set('orient', mode);
+    this.#applyOrientation(true);
+  }
+
+  #bindOrientation() {
+    const saved = prefs.get('orient', 'auto');
+    this.#orientation = PlayerUI.ORIENTATIONS.includes(saved) ? saved : 'auto';
+    video.addEventListener('loadedmetadata', () => { if (this.#orientation === 'auto') this.#applyOrientation(); });   // autre vidéo en plein écran : l'écran suit sa forme
+    video.addEventListener('resize', () => { if (this.#orientation === 'auto') this.#applyOrientation(); });           // la forme de l'image a changé
+  }
+
   /* ----- plein écran ----- */
   #bindScreen() {
     const sync = () => {
@@ -513,7 +582,8 @@ class PlayerUI {
       setIcon(button, full ? 'shrink' : 'expand');
       button.setAttribute('aria-label', full ? 'Quitter le plein écran' : 'Plein écran');
       button.title = full ? 'Quitter le plein écran (F)' : 'Plein écran (F)';
-      if (!full) screen.orientation?.unlock?.();
+      if (full) this.#applyOrientation(); else screen.orientation?.unlock?.();
+      if (!this.#menu.hidden) this.#openMenu(this.#panel === 'orient' && !full ? 'root' : this.#panel);   // l'option d'orientation n'existe qu'en plein écran
       this.#poke();
     };
     document.addEventListener('fullscreenchange', sync);

@@ -112,6 +112,7 @@ ICONS.update({
     "replay": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
     "gauge": '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
     "chevron_left": '<path d="m15 18-6-6 6-6"/>',
+    "orientation": '<rect width="10" height="16" x="3" y="4" rx="2"/><path d="M17 8h2a2 2 0 0 1 2 2v7"/><path d="m19 15 2 2 2-2"/>',
 })
 
 
