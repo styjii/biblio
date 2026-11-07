@@ -195,16 +195,25 @@ class ServerTests(unittest.TestCase):
         try:
             status, page = self.get("/watch?f=clip-b.mp4")
             self.assertEqual(status, 200)
-            for ident in ("w-prev", "w-next", "w-back", "w-fwd", "w-shuffle", "w-repeat",
-                          "vbox", "vp-ui", "vp-seek", "vp-mute", "vp-vol", "vp-menu", "vp-toast", "vp-set", "vp-fs"):
+            # toutes les commandes sont dans le lecteur : -10 s / +10 s, aléatoire, répétition, volume, paramètres, plein écran…
+            for ident in ("vbox", "vp-ui", "vp-seek", "vp-back", "vp-fwd", "vp-shuffle", "vp-repeat", "vp-mute", "vp-vol",
+                          "vp-menu", "vp-toast", "vp-set", "vp-fs"):
                 self.assertIn(f"id='{ident}'", page)
+            for act in ("prev", "next", "back", "fwd", "shuffle", "repeat", "settings"):
+                self.assertIn(f"data-act='{act}'", page)
+            # … et plus rien à l'extérieur : ni barre de commandes, ni lecture automatique, ni lien de téléchargement
+            for ident in ("w-prev", "w-next", "w-back", "w-fwd", "w-shuffle", "w-repeat", "autonext"):
+                self.assertNotIn(f"id='{ident}'", page)
+            self.assertNotIn("class='wbar'", page)
             self.assertNotIn("class='btn'", page)                     # plus de liens « Précédente / Suivante » figés
+            self.assertNotIn("Télécharger</a>", page)
             found = re.search(r"window\.WCFG = (\{.*?\});", page)
             self.assertIsNotNone(found)
             cfg = json.loads(found.group(1)) if found else {}
             self.assertEqual([i["f"] for i in cfg["items"]], ["clip-a.mp4", "clip-b.mp4", "clip-c.mp4"])
             self.assertEqual(cfg["index"], 1)
             self.assertEqual(cfg["items"][2]["u"], "/watch?f=clip-c.mp4")
+            self.assertEqual(cfg["download"], "/raw?dl=1&f=clip-b.mp4")      # le téléchargement est dans le menu des paramètres
             self.assertIn("window.WICO", page)
         finally:
             for name in ("clip-a.mp4", "clip-b.mp4", "clip-c.mp4"):

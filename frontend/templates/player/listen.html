@@ -1,4 +1,4 @@
-{# Lecteur audio : la liste des pistes est remplie par frontend/js/listen/ à partir de window.LCFG. #}
+{# Lecteur audio (responsive : mise en page adaptée par frontend/css/listen.css selon la largeur ET la hauteur de l'écran). La liste des pistes est remplie par frontend/js/listen/ à partir de window.LCFG. #}
 <main class='listen'>
   <section class='lplayer'>
     <div class='cover' id='l-cover'>
@@ -25,15 +25,17 @@
       <button id='b-fwd' class='abtn' type='button' title='Avancer de 10 s (L)' aria-label='Avancer de 10 secondes'>{{ icon fwd10 24 }}</button>
       <button id='b-next' class='abtn' type='button' title='Piste suivante (N)' aria-label='Piste suivante'>{{ icon next 24 }}</button>
     </div>
-    <div class='modes'>
-      <button id='b-shuffle' class='abtn' type='button' title='Lecture aléatoire (S)' aria-label='Lecture aléatoire' aria-pressed='false'>{{ icon shuffle 24 }}</button>
-      <button id='b-repeat' class='abtn' type='button' title='Répétition (R)' aria-label='Répétition : désactivée' aria-pressed='false'>{{ icon repeat 24 }}</button>
-      <button id='b-rate' class='pill sm' type='button' title='Vitesse de lecture (&lt; et &gt;)'>1×</button>
-      <a class='pill sm' id='l-dl' href='#' title='Télécharger'>{{ icon download 16 }}Télécharger</a>
-    </div>
-    <div class='vol'>
-      <button id='b-mute' class='abtn sm' type='button' title='Muet (M)' aria-label='Muet' aria-pressed='false'>{{ icon volume 18 }}</button>
-      <input id='l-vol' class='rng' type='range' min='0' max='100' value='100' step='1' aria-label='Volume'>
+    <div class='ltools'>
+      <div class='modes'>
+        <button id='b-shuffle' class='abtn' type='button' title='Lecture aléatoire (S)' aria-label='Lecture aléatoire' aria-pressed='false'>{{ icon shuffle 24 }}</button>
+        <button id='b-repeat' class='abtn' type='button' title='Répétition (R)' aria-label='Répétition : désactivée' aria-pressed='false'>{{ icon repeat 24 }}</button>
+        <button id='b-rate' class='pill sm' type='button' title='Vitesse de lecture (&lt; et &gt;)' aria-label='Vitesse de lecture'>1×</button>
+        <a class='pill sm' id='l-dl' href='#' title='Télécharger la piste' aria-label='Télécharger la piste'>{{ icon download 16 }}<span class='lbl'>Télécharger</span></a>
+      </div>
+      <div class='vol'>
+        <button id='b-mute' class='abtn sm' type='button' title='Muet (M)' aria-label='Muet' aria-pressed='false'>{{ icon volume 18 }}</button>
+        <input id='l-vol' class='rng' type='range' min='0' max='100' value='100' step='1' aria-label='Volume'>
+      </div>
     </div>
     <div id='l-msg' class='sub lmsg' role='status'></div>
     <details class='lkeys'>

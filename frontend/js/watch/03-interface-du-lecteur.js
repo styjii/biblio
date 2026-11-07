@@ -1,7 +1,9 @@
 
 /** Interface du lecteur façon YouTube : barre de commandes qui se masque, position (plage chargée, survol, glissement),
-    volume, menu des paramètres (vitesse, sous-titres, lecture automatique), plein écran, mode cinéma, image dans l'image,
-    gestes tactiles (tape = commandes, double tape sur les côtés = ±10 s). Sans ce script, les commandes natives restent. */
+    précédente / suivante, ±10 s, aléatoire, répétition, volume, plein écran, mode cinéma, image dans l'image, et menu des
+    paramètres (lecture automatique, aléatoire, répétition, vitesse, sous-titres, téléchargement), gestes tactiles
+    (tape = commandes, double tape sur les côtés = ±10 s). Aucune commande n'est placée hors du lecteur.
+    Sans ce script, les commandes natives restent. */
 class PlayerUI {
   static HIDE_AFTER = 3000;                              // ms sans activité avant de masquer les commandes (pendant la lecture)
   static SKIP = 10;                                      // s : double tape sur un côté de l'image
@@ -109,6 +111,32 @@ class PlayerUI {
     this.#selectTrack(wanted >= 0 ? wanted : 0, true);
   }
 
+  /** Télécharge la vidéo en cours (lien de téléchargement du serveur, sans quitter la page). */
+  download() {
+    const link = document.createElement('a');
+    link.href = cfg.download;
+    link.download = '';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    say('Téléchargement lancé.');
+  }
+
+  /** Reflète l'aléatoire et la répétition sur les boutons de la barre (et dans le menu s'il est ouvert). */
+  renderModes({shuffle, repeat}) {
+    const names = {off: 'désactivée', all: 'toutes les vidéos', one: 'cette vidéo'};
+    const shuffleButton = $('vp-shuffle');
+    const repeatButton = $('vp-repeat');
+    shuffleButton.classList.toggle('on', shuffle);
+    shuffleButton.setAttribute('aria-pressed', String(shuffle));
+    setIcon(repeatButton, repeat === 'one' ? 'repeat1' : 'repeat');
+    repeatButton.classList.toggle('on', repeat !== 'off');
+    repeatButton.setAttribute('aria-pressed', String(repeat !== 'off'));
+    repeatButton.setAttribute('aria-label', `Répétition : ${names[repeat]}`);
+    repeatButton.title = `Répétition (R) : ${{off: 'aucune', all: 'tout', one: 'une vidéo'}[repeat]}`;
+    if (!this.#menu.hidden) this.#renderMenu(true);
+  }
+
   /** Affiche un instant le curseur de volume (réglage au clavier). */
   peekVolume() {
     const box = $('vp-volbox');
@@ -128,6 +156,10 @@ class PlayerUI {
         play: () => this.toggle(),
         prev: () => this.#host.previous(),
         next: () => this.#host.next(),
+        back: () => this.skip(-PlayerUI.SKIP),
+        fwd: () => this.skip(PlayerUI.SKIP),
+        shuffle: () => this.#host.setShuffle(!this.#host.shuffle),
+        repeat: () => this.#host.cycleRepeat(),
         mute: () => this.#settings.toggleMute(),
         cc: () => this.toggleCaptions(),
         settings: () => this.#toggleMenu(),
@@ -371,8 +403,10 @@ class PlayerUI {
     this.#schedule();
   }
 
-  #renderMenu() {
+  /** `keepFocus` : un réglage vient d'être basculé, le focus reste sur la même ligne (sinon il va sur la première). */
+  #renderMenu(keepFocus = false) {
     const rows = [];
+    const focused = keepFocus ? [...this.#menu.querySelectorAll('button')].indexOf(document.activeElement) : -1;
     const row = (label, {value = '', checked, icon, onClick, header, toggle} = {}) => {
       const button = document.createElement('button');
       button.type = 'button';
@@ -386,7 +420,7 @@ class PlayerUI {
         button.append(mark);
       } else if (icon) {
         const mark = document.createElement('span');
-        mark.className = 'ck';
+        mark.className = 'ck ic';
         mark.innerHTML = icon;
         button.append(mark);
       }
@@ -396,11 +430,13 @@ class PlayerUI {
       if (toggle) { const sw = document.createElement('span'); sw.className = 'sw'; button.append(sw); }
       else if (value) { const v = document.createElement('span'); v.className = 'val'; v.textContent = value; button.append(v); }
       if (checked !== undefined) button.setAttribute('aria-checked', String(Boolean(checked)));
+      else if (toggle) button.setAttribute('aria-checked', String(Boolean(toggle.on)));
       button.addEventListener('click', onClick);
       rows.push(button);
     };
     const rateLabel = (r) => (r === 1 ? 'Normale' : `${String(r).replace('.', ',')}×`);
-    const auto = $('autonext');
+    const repeatLabel = {off: 'Désactivée', all: 'Toutes les vidéos', one: 'Cette vidéo'};
+    const host = this.#host;
     if (this.#panel === 'speed') {
       row('Vitesse de lecture', {header: true, onClick: () => this.#openMenu('root')});
       for (const rate of PlaybackSettings.RATES) {
@@ -410,13 +446,22 @@ class PlayerUI {
       row('Sous-titres', {header: true, onClick: () => this.#openMenu('root')});
       row('Désactivés', {checked: !this.#active, onClick: () => { this.#selectTrack(-1, true); this.#closeMenu(); }});
       this.#tracks.forEach((track, i) => row(track.label || `Piste ${i + 1}`, {checked: track === this.#active, onClick: () => { this.#selectTrack(i, true); this.#closeMenu(); }}));
+    } else if (this.#panel === 'repeat') {
+      row('Répétition', {header: true, onClick: () => this.#openMenu('root')});
+      for (const mode of ['off', 'all', 'one']) {
+        row(repeatLabel[mode], {checked: mode === host.repeat, onClick: () => { host.setRepeat(mode); this.#closeMenu(); }});
+      }
     } else {
-      row('Vitesse de lecture', {value: rateLabel(this.#settings.rate), icon: '', onClick: () => this.#openMenu('speed')});
-      if (this.#tracks.length) row('Sous-titres', {value: this.#active?.label || 'Désactivés', onClick: () => this.#openMenu('subs')});
-      row('Lecture automatique', {toggle: {on: auto.checked}, onClick: () => { auto.checked = !auto.checked; auto.dispatchEvent(new Event('change')); this.#renderMenu(); }});
+      const ic = (name) => icons[name] ?? '';
+      row('Lecture automatique', {icon: ic('queue'), toggle: {on: host.autoNext}, onClick: () => { host.setAutoNext(!host.autoNext); this.#renderMenu(true); }});
+      row('Lecture aléatoire', {icon: ic('shuffle'), toggle: {on: host.shuffle}, onClick: () => host.setShuffle(!host.shuffle)});
+      row('Répétition', {icon: ic('repeat'), value: repeatLabel[host.repeat], onClick: () => this.#openMenu('repeat')});
+      row('Vitesse de lecture', {icon: ic('gauge'), value: rateLabel(this.#settings.rate), onClick: () => this.#openMenu('speed')});
+      if (this.#tracks.length) row('Sous-titres', {icon: ic('captions'), value: this.#active?.label || 'Désactivés', onClick: () => this.#openMenu('subs')});
+      row('Télécharger la vidéo', {icon: ic('download'), onClick: () => { this.#closeMenu(); this.download(); }});
     }
     this.#menu.replaceChildren(...rows);
-    this.#menu.querySelector('button')?.focus({preventScroll: true});
+    (rows[focused] ?? rows[0])?.focus({preventScroll: true});
   }
 
   /* ----- sous-titres : dessinés par le script, au-dessus de la barre de commandes ----- */

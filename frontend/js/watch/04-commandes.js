@@ -1,44 +1,26 @@
 
-/** Le lecteur : enchaînement des vidéos, aléatoire et répétition, boutons, clavier et touches multimédia. */
+/** Le lecteur : enchaînement des vidéos, aléatoire et répétition, clavier et touches multimédia (les boutons sont dans PlayerUI). */
 class VideoPlayer {
   #order = new PlayOrder();
   #settings = new PlaybackSettings();
   #resume = new ResumeTracker();
   #ui;
-  #autoNext = $('autonext');
+  #autoNext = prefs.get('autonext', '1') !== '0';        // lecture automatique : enchaîner la vidéo suivante à la fin
   #shuffle = prefs.get('shuffle', '0') === '1';
   #pendingUrl = null;                                    // vidéo à ouvrir dès que le réseau revient
   #repeat = ['off', 'all', 'one'].includes(prefs.get('repeat', 'off')) ? prefs.get('repeat', 'off') : 'off';   // off | all | one
 
   constructor() {
     new PlaybackGuard();                                   // s'abonne seul aux événements de la vidéo (reprise après coupure)
-    this.#autoNext.checked = prefs.get('autonext', '1') !== '0';
-    this.#autoNext.addEventListener('change', () => prefs.set('autonext', this.#autoNext.checked ? '1' : '0'));
     video.addEventListener('ended', () => this.#onEnded());
     this.#ui = new PlayerUI(this.#settings, this);
 
-    $('w-prev').addEventListener('click', () => this.previous());
-    $('w-next').addEventListener('click', () => this.next());
-    $('w-back').addEventListener('click', () => this.#ui.skip(-10));
-    $('w-fwd').addEventListener('click', () => this.#ui.skip(10));
-    $('w-shuffle').addEventListener('click', () => this.setShuffle(!this.#shuffle));
-    $('w-repeat').addEventListener('click', () => this.cycleRepeat());
     document.addEventListener('keydown', (e) => this.#onKey(e));
     this.#setupMediaSession();
-    this.#pinControls();
 
     if (innerWidth >= 1000) document.querySelector('.row.cur')?.scrollIntoView({block: 'nearest'});
     this.#order.restore(this.#shuffle);
     this.#renderModes();
-  }
-
-  /** Mobile : les commandes restent collées juste sous le lecteur ; leur position dépend de la hauteur réelle de la vidéo. */
-  #pinControls() {
-    const box = video.parentElement;
-    const sync = () => document.documentElement.style.setProperty('--ph', `${box.offsetHeight}px`);
-    sync();
-    if (typeof ResizeObserver === 'function') new ResizeObserver(sync).observe(box);
-    else window.addEventListener('resize', sync);
   }
 
   /* ----- enchaînement ----- */
@@ -74,12 +56,22 @@ class VideoPlayer {
   #onEnded() {
     this.#resume.finish();
     if (this.#repeat === 'one') { video.currentTime = 0; return play(); }      // (repli : la boucle native s'en charge déjà)
-    if (!this.#autoNext.checked) return;
+    if (!this.#autoNext) return;
     if (window.Transfers?.busy()) return say('Lecture automatique suspendue : un envoi est en cours dans cet onglet.');
     this.next(true);
   }
 
-  /* ----- aléatoire et répétition ----- */
+  /* ----- lecture automatique, aléatoire et répétition (réglages lus et modifiés par PlayerUI) ----- */
+  get autoNext() { return this.#autoNext; }
+  get shuffle() { return this.#shuffle; }
+  get repeat() { return this.#repeat; }
+
+  setAutoNext(on) {
+    this.#autoNext = on;
+    prefs.set('autonext', on ? '1' : '0');
+    say(on ? 'Lecture automatique activée.' : 'Lecture automatique désactivée.');
+  }
+
   setShuffle(on) {
     this.#shuffle = on;
     prefs.set('shuffle', on ? '1' : '0');
@@ -89,24 +81,17 @@ class VideoPlayer {
     say(on ? 'Lecture aléatoire activée.' : "Lecture dans l'ordre.");
   }
 
-  cycleRepeat() {
-    this.#repeat = {off: 'all', all: 'one', one: 'off'}[this.#repeat];
-    prefs.set('repeat', this.#repeat);
+  cycleRepeat() { this.setRepeat({off: 'all', all: 'one', one: 'off'}[this.#repeat]); }
+
+  setRepeat(mode) {
+    this.#repeat = mode;
+    prefs.set('repeat', mode);
     this.#renderModes();
-    say({off: 'Répétition désactivée.', all: 'Répétition de toutes les vidéos.', one: 'Répétition de la vidéo.'}[this.#repeat]);
+    say({off: 'Répétition désactivée.', all: 'Répétition de toutes les vidéos.', one: 'Répétition de la vidéo.'}[mode]);
   }
 
   #renderModes() {
-    const shuffle = $('w-shuffle');
-    const repeat = $('w-repeat');
-    const label = {off: 'désactivée', all: 'toutes les vidéos', one: 'cette vidéo'}[this.#repeat];
-    shuffle.classList.toggle('on', this.#shuffle);
-    shuffle.setAttribute('aria-pressed', String(this.#shuffle));
-    setIcon(repeat, this.#repeat === 'one' ? 'repeat1' : 'repeat');
-    repeat.classList.toggle('on', this.#repeat !== 'off');
-    repeat.setAttribute('aria-pressed', String(this.#repeat !== 'off'));
-    repeat.setAttribute('aria-label', `Répétition : ${label}`);
-    repeat.title = `Répétition (R) : ${{off: 'aucune', all: 'tout', one: 'une vidéo'}[this.#repeat]}`;
+    this.#ui.renderModes({shuffle: this.#shuffle, repeat: this.#repeat});
     video.loop = this.#repeat === 'one';
   }
 

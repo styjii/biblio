@@ -1,4 +1,6 @@
 /* ---------- Lecteur vidéo façon YouTube : commandes, barre de position, menu, gestes, plein écran ----------
+   Toutes les commandes vivent ici : précédente / suivante, ±10 s, aléatoire, répétition, volume, sous-titres, plein écran,
+   et le menu des paramètres (lecture automatique, aléatoire, répétition, vitesse, sous-titres, téléchargement).
    Les commandes ne sont dessinées que si le script a ajouté la classe « vp-on » (sinon, commandes natives du navigateur).
    Les tailles suivent la largeur du lecteur (requêtes de conteneur), donc aussi en plein écran et en mode cinéma. */
 .player{--vp-accent:#ff2e4d; --vp-btn:42px; --vp-bar:48px; color:#fff; -webkit-user-select:none; user-select:none; touch-action:manipulation}
@@ -36,7 +38,7 @@
 .vp-b svg{width:24px; height:24px; fill:none}
 .vp-b[data-state='play'] svg,.vp-b[data-state='pause'] svg,.vp-b[data-act='next'] svg,.vp-b[data-act='prev'] svg{fill:currentColor}
 .vp-b[hidden]{display:none}
-.vp-b[aria-pressed='true'][data-act='cc']{box-shadow:inset 0 -3px 0 var(--vp-accent); border-radius:6px}
+.vp-b[aria-pressed='true'][data-act='cc'],.vp-b.on[data-act='shuffle'],.vp-b.on[data-act='repeat']{box-shadow:inset 0 -3px 0 var(--vp-accent); border-radius:6px}
 .vp-b[data-act='settings'] svg{transition:transform .25s}
 .player.menu .vp-b[data-act='settings'] svg{transform:rotate(45deg)}
 .vp-time{margin-left:6px; font-size:13px; white-space:nowrap; font-variant-numeric:tabular-nums; text-shadow:0 1px 2px rgba(0,0,0,.6)}
@@ -51,23 +53,26 @@
 .vp-rng::-webkit-slider-thumb{-webkit-appearance:none; width:12px; height:12px; margin-top:-4.5px; border:0; border-radius:50%; background:#fff}
 .vp-rng::-moz-range-thumb{width:12px; height:12px; border:0; border-radius:50%; background:#fff}
 
-/* écran tactile : gros boutons au centre (précédente, lecture, suivante), pas de volume (touches de l'appareil) */
-.vp-mid{position:absolute; inset:0; display:none; align-items:center; justify-content:center; gap:clamp(18px,9cqw,56px); pointer-events:none}
-.vp-mid .vp-b{width:54px; height:54px; background:rgba(0,0,0,.5)}
-.vp-mid .vp-b[data-act='play']{width:70px; height:70px}
-.vp-mid .vp-b[data-act='play'] svg{width:36px; height:36px}
-.vp-mid .vp-b[data-act='prev'] svg,.vp-mid .vp-b[data-act='next'] svg{width:28px; height:28px}
+/* mode compact (écran tactile OU lecteur étroit) : gros boutons au centre (précédente, -10 s, lecture, +10 s, suivante),
+   pas de volume (touches de l'appareil) ; les doublons de la barre disparaissent */
+.vp-mid{position:absolute; inset:0; display:none; align-items:center; justify-content:center; gap:clamp(8px,3.4cqw,40px); pointer-events:none}
+.vp-mid .vp-b{width:46px; height:46px; background:rgba(0,0,0,.5)}
+.vp-mid .vp-b.vp-skb{width:50px; height:50px}
+.vp-mid .vp-b[data-act='play']{width:66px; height:66px}
+.vp-mid .vp-b[data-act='play'] svg{width:34px; height:34px}
+.vp-mid .vp-b[data-act='prev'] svg,.vp-mid .vp-b[data-act='next'] svg,.vp-mid .vp-skb svg{width:26px; height:26px}
 .player.busy .vp-mid .vp-b[data-act='play']{opacity:0}
 @media(pointer:coarse){
   .vp-mid{display:flex}
-  .vp-bar [data-act='play'],.vp-vol,.vp-nx{display:none}
+  .vp-bar [data-act='play'],.vp-vol,.vp-nx,.vp-sk{display:none}
   .vp-seek{height:30px}
   .vp-rail{height:4px}
   .vp-thumb{transform:scale(1)}
   .player{--vp-btn:44px}
+  .vp-menu button{min-height:46px}
 }
 
-/* menu des paramètres : vitesse, sous-titres, lecture automatique */
+/* menu des paramètres : lecture automatique, aléatoire, répétition, vitesse, sous-titres, téléchargement */
 .vp-menu{position:absolute; right:12px; bottom:calc(var(--vp-bar) + 30px); width:min(290px,calc(100% - 24px)); max-height:calc(100% - var(--vp-bar) - 56px); overflow:auto; padding:6px; border-radius:12px; background:rgba(26,26,26,.95); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); box-shadow:0 8px 28px rgba(0,0,0,.5); font-size:14px; pointer-events:auto}
 .vp-menu button{display:flex; align-items:center; gap:12px; width:100%; min-height:42px; padding:8px 12px; border:0; border-radius:8px; background:transparent; color:#fff; text-align:left; cursor:pointer}
 .vp-menu button:hover,.vp-menu button:focus-visible{background:rgba(255,255,255,.14); outline:none}
@@ -76,6 +81,7 @@
 .vp-menu .hd{margin-bottom:4px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,.16); border-radius:8px 8px 0 0; font-weight:600}
 .vp-menu .ck{width:20px; height:20px; flex:none}
 .vp-menu .ck svg{visibility:hidden}
+.vp-menu .ck.ic svg{visibility:visible}
 .vp-menu .on .ck svg{visibility:visible}
 .vp-menu .sw{position:relative; width:34px; height:18px; margin-left:auto; border-radius:99px; background:rgba(255,255,255,.3); transition:background .2s}
 .vp-menu .sw::after{content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:transform .2s}
@@ -113,19 +119,28 @@
 .player:fullscreen .vp-time{font-size:15px}
 .player:fullscreen .vp-menu{right:22px; font-size:15px}
 
-/* lecteur étroit (téléphone en portrait) : barre compacte */
-@container vp (max-width:560px){
+/* lecteur étroit (téléphone en portrait, petite fenêtre) : barre compacte, commandes principales au centre */
+@container vp (max-width:640px){
+  .vp-mid{display:flex}
   .vp-bar{padding:0 6px 2px}
   .vp-row{height:44px}
   .vp-b{width:38px; height:38px}
   .vp-b svg{width:22px; height:22px}
-  .vp-nx,.vp-vol{display:none}
+  .vp-bar [data-act='play'],.vp-nx,.vp-sk,.vp-vol,.vp-mode{display:none}
   .vp-time{margin-left:4px; font-size:12.5px}
   .vp-desk{display:none}
   .vp-menu{left:8px; right:8px; bottom:8px; width:auto; max-height:calc(100% - 16px)}      /* petit lecteur : le menu couvre la barre, avec défilement si besoin */
   .vp-top{padding:12px 16px 30px; font-size:16px}
 }
-@container vp (min-width:561px) and (max-width:760px){.vp-time{font-size:12.5px}}
+@container vp (max-width:380px){                  /* très petit lecteur : boutons centraux plus compacts */
+  .vp-mid .vp-b{width:40px; height:40px}
+  .vp-mid .vp-b.vp-skb{width:42px; height:42px}
+  .vp-mid .vp-b[data-act='play']{width:56px; height:56px}
+  .vp-mid .vp-b[data-act='play'] svg{width:30px; height:30px}
+  .vp-mid .vp-b[data-act='prev'] svg,.vp-mid .vp-b[data-act='next'] svg,.vp-mid .vp-skb svg{width:22px; height:22px}
+  .vp-time{font-size:12px}
+}
+@container vp (min-width:641px) and (max-width:780px){.vp-time{font-size:12.5px}.vp-mode{display:none}}      /* lecteur moyen : aléatoire et répétition restent dans le menu */
 /* mode cinéma : seulement sur grand écran (la mise en page est dans 07-page-de-lecture-video.css) */
 @media(max-width:999px){.vp-desk{display:none}}
 @media(prefers-reduced-motion:reduce){
