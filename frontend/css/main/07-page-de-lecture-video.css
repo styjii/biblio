@@ -70,6 +70,8 @@ a.chip:hover,a.btn:hover{background:var(--accent-soft); border-color:var(--accen
   .dock .chips{margin-top:8px; gap:8px; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none}
   .dock .chips::-webkit-scrollbar{display:none}
   .dock .chip{padding:5px 12px; font-size:13px; flex-shrink:0; white-space:nowrap}
+  /* mode cinéma sur écran étroit : le lecteur prend la forme de la vidéo (--vp-ar, posée par le script), sans dépasser la hauteur utile de l'écran */
+  .watch.theater .dock .player{aspect-ratio:var(--vp-ar,16/9); max-height:calc(100vh - var(--tb) - 190px); max-height:calc(100dvh - var(--tb) - 190px)}
   .row.flash{animation:rowflash 1.4s ease-out}
   @media(prefers-reduced-motion:reduce){.row.flash{animation:none}}
 }

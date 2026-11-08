@@ -135,7 +135,6 @@
   .vp-rng::-webkit-slider-thumb{width:16px; height:16px; margin-top:-6.5px}
   .vp-rng::-moz-range-thumb{width:16px; height:16px}
   .vp-time{margin-left:4px; font-size:12.5px}
-  .vp-desk{display:none}
   .vp-menu{left:8px; right:8px; bottom:8px; width:auto; max-height:calc(100% - 16px)}      /* petit lecteur : le menu couvre la barre, avec défilement si besoin */
   .vp-top{padding:12px 16px 30px; font-size:16px}
 }
@@ -153,8 +152,13 @@
 }
 .vp-vol.fixed .vp-rng{display:none}               /* appareil au volume imposé par le système (iPhone) : le curseur serait sans effet, le bouton muet reste */
 @container vp (min-width:641px) and (max-width:780px){.vp-time{font-size:12.5px}.vp-mode{display:none}}      /* lecteur moyen : aléatoire et répétition restent dans le menu */
-/* mode cinéma : seulement sur grand écran (la mise en page est dans 07-page-de-lecture-video.css) */
-@media(max-width:999px){.vp-desk{display:none}}
+@container vp (max-width:420px){                  /* téléphone en portrait : le bouton du mode cinéma est toujours là, les boutons se resserrent pour tenir sur la barre */
+  .vp-b{width:34px; height:34px}
+  .vp-b svg{width:20px; height:20px}
+}
+/* mode cinéma en plein écran : l'image remplit l'écran (classe posée par le script seulement si cela ne rogne qu'une petite partie de l'image) */
+.player.fill video{object-fit:cover}
+/* mode cinéma : la mise en page de la page est dans 07-page-de-lecture-video.css */
 @media(prefers-reduced-motion:reduce){
   .vp-fx.go,.vp-seekfx.go{animation-duration:.01s}
   .vp-spin svg{animation-duration:2.5s}

@@ -3,7 +3,8 @@
     précédente / suivante, ±10 s, aléatoire, répétition, volume, plein écran, mode cinéma, image dans l'image, et menu des
     paramètres (lecture automatique, aléatoire, répétition, vitesse, sous-titres, téléchargement), gestes tactiles
     (tape = commandes, double tape sur les côtés = ±10 s), orientation du plein écran (automatique selon la vidéo,
-    paysage ou portrait), masquage du curseur de la souris après un moment d'inactivité.
+    paysage ou portrait), masquage du curseur de la souris après un moment d'inactivité, mode cinéma (bouton toujours présent :
+    page large sur grand écran, lecteur adapté à la forme de la vidéo sur écran étroit, image sans bandes noires en plein écran).
     Aucune commande n'est placée hors du lecteur.
     Sans ce script, les commandes natives restent. */
 class PlayerUI {
@@ -13,6 +14,7 @@ class PlayerUI {
   static CURSOR_HIDE_AFTER = 3000;                       // ms sans mouvement de la souris avant de masquer le curseur
   static ORIENTATIONS = ['auto', 'landscape', 'portrait'];
   static ORIENTATION_LABELS = {auto: 'Automatique', landscape: 'Paysage', portrait: 'Portrait'};
+  static FILL_MAX_CROP = 0.25;                           // mode cinéma en plein écran : l'image remplit l'écran si cela en rogne au plus ce quart
 
   #box = $('vbox');
   #page = $('watch');
@@ -54,6 +56,7 @@ class PlayerUI {
     this.#bindCaptions();
     this.#bindScreen();
     this.#bindOrientation();
+    this.#bindShape();
     this.#renderPlay();
     this.#renderBusy();
     this.#renderProgress();
@@ -100,11 +103,36 @@ class PlayerUI {
 
   get #fullscreen() { return (document.fullscreenElement ?? document.webkitFullscreenElement) === this.#box; }
 
+  /** Mode cinéma : la vidéo prend le plus de place possible, selon la situation.
+      - grand écran (≥ 1000 px) : le lecteur prend toute la largeur de la page, la liste passe dessous (CSS) ;
+      - écran étroit : le lecteur prend la forme de la vidéo (plus haut pour une vidéo verticale, moins pour un film large) (CSS, --vp-ar) ;
+      - plein écran : l'image remplit l'écran, sans bandes noires, tant que cela n'en rogne qu'une petite partie (#fit).
+      Le réglage est commun à tous ces cas et mémorisé. Sans `force` (clic, touche T), un message le confirme quand la page ne montre pas le changement. */
   toggleTheater(force) {
     const on = force ?? !this.#page.classList.contains('theater');
     this.#page.classList.toggle('theater', on);
     this.#ui.querySelector('[data-act="theater"]')?.setAttribute('aria-pressed', String(on));
     prefs.set('theater', on ? '1' : '0');
+    this.#fit();
+    if (force === undefined && (this.#fullscreen || innerWidth < 1000)) say(on ? 'Mode cinéma activé' : 'Mode cinéma désactivé');
+  }
+
+  /** Forme de la vidéo (pour le lecteur étroit) et remplissage de l'écran en plein écran (mode cinéma). */
+  #bindShape() {
+    for (const type of ['loadedmetadata', 'resize', 'emptied']) video.addEventListener(type, () => this.#fit());
+    addEventListener('resize', () => this.#fit());          // rotation de l'appareil, redimensionnement de la fenêtre
+    this.#fit();
+  }
+
+  #fit() {
+    const {videoWidth: w, videoHeight: h} = video;
+    this.#box.style.setProperty('--vp-ar', w && h ? (w / h).toFixed(4) : '');           // vide : retour à 16/9
+    let fill = false;
+    if (this.#page.classList.contains('theater') && this.#fullscreen && w && h && this.#box.clientHeight) {
+      const r = (this.#box.clientWidth / this.#box.clientHeight) / (w / h);             // écran / vidéo : > 1 = écran plus large que la vidéo
+      fill = 1 - Math.min(r, 1 / r) <= PlayerUI.FILL_MAX_CROP;                         // part de l'image qui serait rognée
+    }
+    this.#box.classList.toggle('fill', fill);
   }
 
   async togglePip() {
@@ -583,6 +611,7 @@ class PlayerUI {
       button.setAttribute('aria-label', full ? 'Quitter le plein écran' : 'Plein écran');
       button.title = full ? 'Quitter le plein écran (F)' : 'Plein écran (F)';
       if (full) this.#applyOrientation(); else screen.orientation?.unlock?.();
+      this.#fit();
       if (!this.#menu.hidden) this.#openMenu(this.#panel === 'orient' && !full ? 'root' : this.#panel);   // l'option d'orientation n'existe qu'en plein écran
       this.#poke();
     };
