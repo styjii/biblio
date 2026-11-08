@@ -1,6 +1,8 @@
 
 /** Le lecteur : enchaînement des vidéos, aléatoire et répétition, clavier et touches multimédia (les boutons sont dans PlayerUI). */
 class VideoPlayer {
+  static FIXED_MOBILE = matchMedia('(max-width:999px) and (min-height:501px)');      // mobile à lecteur fixe : même condition que le CSS du « dock » (07-page-de-lecture-video.css)
+
   #order = new PlayOrder();
   #settings = new PlaybackSettings();
   #resume = new ResumeTracker();
@@ -21,7 +23,9 @@ class VideoPlayer {
     document.addEventListener('keydown', (e) => this.#onKey(e));
     this.#setupMediaSession();
 
-    if (innerWidth >= 1000) document.querySelector('.row.cur')?.scrollIntoView({block: 'nearest'});
+    const list = this.#listMode();
+    if (list === 'aside') document.querySelector('.row.cur')?.scrollIntoView({block: 'nearest'});
+    else if (list === 'fixed') requestAnimationFrame(() => this.#revealCurrent(false));      // la liste défile sous le lecteur fixe : la vidéo en cours doit y être visible
     this.#order.restore(this.#shuffle);
     this.#renderModes();
   }
@@ -95,8 +99,39 @@ class VideoPlayer {
     document.title = page.title;
     const current = page.querySelector('.list .row.cur')?.dataset.f;
     document.querySelectorAll('.list .row').forEach((row) => row.classList.toggle('cur', row.dataset.f === current));
-    document.querySelector('.list .row.cur')?.scrollIntoView({block: 'nearest'});
+    const list = this.#listMode();
+    if (list === 'fixed') this.#revealCurrent(!this.#isFullscreen());
+    else if (list === 'aside') document.querySelector('.list .row.cur')?.scrollIntoView({block: 'nearest'});
     this.#updateMediaTitle(title);
+  }
+
+  /** Où est la liste, et doit-elle suivre la vidéo en cours ?
+      - 'fixed'  : mobile à lecteur fixe, la liste est celle de la page : on amène la ligne en cours sous le lecteur (#revealCurrent) ;
+      - 'aside'  : PC, liste dans son volet à droite (défilement propre) : la ligne en cours y est ramenée en vue ;
+      - 'static' : lecteur non fixé et liste dans la page (mode cinéma, mobile en paysage bas) : aucun défilement automatique, la page reste où
+                   l'on est (sinon elle quitterait le lecteur pour descendre à la ligne en cours) ; la ligne en cours reste surlignée. */
+  #listMode() {
+    if (VideoPlayer.FIXED_MOBILE.matches) return 'fixed';
+    if (innerWidth >= 1000 && !$('watch')?.classList.contains('theater')) return 'aside';
+    return 'static';
+  }
+
+  /** Mobile à lecteur fixe : la liste est celle de la page, qui défile sous le lecteur et ses informations (collés en haut). `scrollIntoView` ne tient pas
+      compte de ce bloc et laisserait la vidéo en cours cachée dessous : on amène donc la ligne juste sous lui, si elle n'est pas déjà visible,
+      et on la fait clignoter un instant (la vidéo en cours est toujours surlignée par la classe « cur »). */
+  #revealCurrent(smooth) {
+    const row = document.querySelector('.list .row.cur');
+    const dock = $('dock');
+    if (!row || !dock) return;
+    const limit = dock.getBoundingClientRect().bottom + 8;                  // le haut de la zone visible de la liste
+    const rect = row.getBoundingClientRect();
+    if (rect.top < limit || rect.bottom > innerHeight) {
+      const calm = matchMedia('(prefers-reduced-motion:reduce)').matches;
+      scrollBy({top: rect.top - limit, behavior: smooth && !calm ? 'smooth' : 'auto'});
+    }
+    row.classList.remove('flash');
+    void row.offsetWidth;                                                   // relance l'animation même si la classe était déjà posée
+    row.classList.add('flash');
   }
 
   /** Ouvre la page d'une vidéo ; hors connexion, attend le retour du réseau (sinon le navigateur afficherait sa page d'erreur et la liste de lecture serait perdue). */

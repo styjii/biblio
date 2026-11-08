@@ -1,5 +1,6 @@
-{# Lecteur vidéo : lecteur façon YouTube. TOUTES les commandes sont dans le lecteur (précédente / suivante, ±10 s, aléatoire, répétition, vitesse, sous-titres, lecture automatique, téléchargement : barre de commandes et menu des paramètres, dessinés par frontend/js/watch/03-interface-du-lecteur.js ; l'attribut « controls » ne sert que de repli sans script). Sous le lecteur : titre, informations et liste du dossier. #}
+{# Lecteur vidéo : lecteur façon YouTube. TOUTES les commandes sont dans le lecteur (précédente / suivante, ±10 s, aléatoire, répétition, vitesse, sous-titres, lecture automatique, téléchargement : barre de commandes et menu des paramètres, dessinés par frontend/js/watch/03-interface-du-lecteur.js ; l'attribut « controls » ne sert que de repli sans script). Sous le lecteur : titre, informations et liste du dossier. Le lecteur et ses informations sont réunis dans « dock » : sur mobile, en mode fixe, ils restent collés ensemble sous la barre du haut (07-page-de-lecture-video.css). #}
 <main class='watch' id='watch'>
+  <div class='dock' id='dock'>
   <div class='player' id='vbox'>
     <video id='player' controls autoplay playsinline preload='metadata' src='/raw?f={{ q }}'>{{ tracks }}</video>
     <div class='vp-cap' id='vp-cap'></div>
@@ -59,5 +60,6 @@
     </div>
     <p class='hint'>Raccourcis : <kbd>K</kbd> lecture/pause · <kbd>J</kbd> <kbd>L</kbd> ±10 s · <kbd>{{ icon arrow_left 12 ik }}</kbd> <kbd>{{ icon arrow_right 12 ik }}</kbd> ±5 s · <kbd>0</kbd>–<kbd>9</kbd> aller à 0–90 % · <kbd>N</kbd> suivante · <kbd>P</kbd> précédente (ou début) · <kbd>S</kbd> aléatoire · <kbd>R</kbd> répétition (aucune, tout, une vidéo) · <kbd>{{ icon arrow_up 12 ik }}</kbd> <kbd>{{ icon arrow_down 12 ik }}</kbd> volume · <kbd>&lt;</kbd> <kbd>&gt;</kbd> vitesse · <kbd>M</kbd> muet · <kbd>C</kbd> sous-titres · <kbd>T</kbd> mode cinéma · <kbd>I</kbd> image dans l'image · <kbd>F</kbd> plein écran</p>
   </section>
+  </div>
   <aside class='next'><h2>Dans ce dossier</h2><div class='list'>{{ rows }}</div></aside>
 </main>
