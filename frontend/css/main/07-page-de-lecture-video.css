@@ -26,6 +26,7 @@ a.chip:hover,a.btn:hover{background:var(--accent-soft); border-color:var(--accen
 .hint{margin-top:14px; font-size:13px; color:var(--muted)}
 .hint kbd{font:inherit; font-size:12px; padding:1px 6px; border-radius:6px; background:var(--bg-2); border:1px solid var(--border)}
 .next{grid-area:next; min-width:0}
+.next h2 .cnt{margin-left:8px; padding:1px 8px; border-radius:99px; background:var(--bg-2); font-size:12px; font-weight:600; letter-spacing:0; text-transform:none; color:var(--muted)}
 .next h2{margin:0 0 12px; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted)}
 .list{display:flex; flex-direction:column; gap:8px}
 .row{display:flex; gap:12px; padding:6px; border-radius:12px; border:1px solid transparent; transition:background .15s,border-color .15s}

@@ -11,6 +11,7 @@ class PlaybackGuard {
   static DECODE_BACKOFF = [0, 5, 15];                     // erreur de décodage : 1er essai à la même position, puis 5 s plus tôt, puis 15 s plus tôt, puis depuis 0:00
                                                           // (un saut vers une position précise peut échouer alors que la lecture continue passe : on repart d'un point sûr)
 
+  onFatal = null;                                         // appelé avec un message quand plus rien n'est tenté (l'interface affiche alors l'écran d'erreur)
   #good = 0;                                              // dernière position où la lecture était réellement en cours (ou visée par un saut)
   #wantPlay = false;                                      // la lecture était voulue (pas mise en pause par l'utilisateur)
   #finished = false;                                      // la vidéo est allée jusqu'au bout : « lecture » la relance alors volontairement à 0:00
@@ -190,6 +191,7 @@ class PlaybackGuard {
     this.#good = 0;
     Progress.done(items[index].f);                            // la position mémorisée est oubliée : le prochain chargement repart de 0:00
     say('Cette vidéo ne peut pas être décodée par ce navigateur, même depuis le début. Clique sur la vidéo pour réessayer.');
+    this.onFatal?.('Cette vidéo ne peut pas être décodée par ce navigateur.');
   }
 
   #reload() {

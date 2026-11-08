@@ -19,6 +19,7 @@ class VideoPlayer {
     this.#guard = new PlaybackGuard();                     // s'abonne seul aux événements de la vidéo (reprise après coupure)
     video.addEventListener('ended', () => this.#onEnded());
     this.#ui = new PlayerUI(this.#settings, this);
+    this.#guard.onFatal = (text) => this.#ui.showError(text);
 
     document.addEventListener('keydown', (e) => this.#onKey(e));
     this.#setupMediaSession();
@@ -96,6 +97,7 @@ class VideoPlayer {
     document.querySelector('.vtitle').textContent = title;
     document.querySelector('.vp-top').textContent = title;
     document.querySelector('.chips').innerHTML = page.querySelector('.chips')?.innerHTML ?? '';
+    document.querySelector('.next h2').innerHTML = page.querySelector('.next h2')?.innerHTML ?? '';      // « Dans ce dossier » et la position (3 / 12)
     document.title = page.title;
     const current = page.querySelector('.list .row.cur')?.dataset.f;
     document.querySelectorAll('.list .row').forEach((row) => row.classList.toggle('cur', row.dataset.f === current));
@@ -223,6 +225,7 @@ class VideoPlayer {
       ArrowUp: () => volume(0.05),
       ArrowDown: () => volume(-0.05),
       Home: () => this.#ui.jumpTo(0),
+      End: () => this.#ui.jumpTo(1),
       n: () => this.next(),
       p: () => this.previous(),
       s: () => this.setShuffle(!this.#shuffle),
@@ -233,9 +236,9 @@ class VideoPlayer {
       i: () => this.#ui.togglePip(),
       c: () => this.#ui.toggleCaptions(),
       '<': () => this.#settings.stepRate(-1),
-      ',': () => this.#settings.stepRate(-1),
+      ',': () => (video.paused ? this.#ui.step(-1) : this.#settings.stepRate(-1)),       // en pause : image précédente ; en lecture : plus lentement
       '>': () => this.#settings.stepRate(1),
-      '.': () => this.#settings.stepRate(1),
+      '.': () => (video.paused ? this.#ui.step(1) : this.#settings.stepRate(1)),         // en pause : image suivante ; en lecture : plus vite
     };
     for (let digit = 0; digit <= 9; digit++) actions[String(digit)] = () => this.#ui.jumpTo(digit / 10);     // 0 à 9 : 0 % à 90 % de la vidéo
     const action = actions[key] ?? actions[lower];
@@ -244,10 +247,20 @@ class VideoPlayer {
     e.preventDefault();
   }
 
-  /** Touches multimédia du téléphone / du clavier et écran de verrouillage. */
+  /** Touches multimédia du téléphone / du clavier et écran de verrouillage : titre, dossier et vignette de la vidéo en cours. */
   #updateMediaTitle(title) {
     if (!('mediaSession' in navigator)) return;
-    try { navigator.mediaSession.metadata = new MediaMetadata({title}); } catch { /* titre non affiché sur l'écran de verrouillage */ }
+    const folder = document.querySelector('.chips .chip')?.textContent?.trim() ?? '';
+    const art = `/thumb?f=${encodeURIComponent(items[index].f)}`;
+    try { navigator.mediaSession.metadata = new MediaMetadata({title, artist: folder, album: 'Ma bibliothèque', artwork: [{src: art}]}); } catch { /* titre non affiché sur l'écran de verrouillage */ }
+  }
+
+  /** Position, durée et vitesse annoncées au système : la barre de progression de l'écran de verrouillage suit la vidéo et peut être déplacée. */
+  #syncMediaSession() {
+    const session = navigator.mediaSession;
+    session.playbackState = video.paused ? 'paused' : 'playing';
+    if (!session.setPositionState || !Number.isFinite(video.duration) || video.duration <= 0) return;
+    try { session.setPositionState({duration: video.duration, playbackRate: video.playbackRate || 1, position: Math.min(video.currentTime, video.duration)}); } catch { /* état non annoncé */ }
   }
 
   #setupMediaSession() {
@@ -258,10 +271,14 @@ class VideoPlayer {
       nexttrack: () => this.next(),
       seekbackward: ({seekOffset} = {}) => this.#ui.skip(-(seekOffset || 10)),
       seekforward: ({seekOffset} = {}) => this.#ui.skip(seekOffset || 10),
+      play: () => play(),
+      pause: () => video.pause(),
+      seekto: ({seekTime} = {}) => { if (Number.isFinite(seekTime) && Number.isFinite(video.duration)) video.currentTime = Math.min(Math.max(0, seekTime), video.duration); },
     };
     for (const [name, handler] of Object.entries(handlers)) {
       try { navigator.mediaSession.setActionHandler(name, handler); } catch { /* action non prise en charge */ }
     }
+    for (const type of ['loadedmetadata', 'durationchange', 'play', 'pause', 'seeked', 'ratechange', 'ended']) video.addEventListener(type, () => this.#syncMediaSession());
   }
 }
 

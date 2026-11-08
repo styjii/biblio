@@ -4,7 +4,7 @@
    Les commandes ne sont dessinées que si le script a ajouté la classe « vp-on » (sinon, commandes natives du navigateur).
    Les tailles suivent la largeur du lecteur (requêtes de conteneur), donc aussi en plein écran et en mode cinéma. */
 .player{--vp-accent:#ff2e4d; --vp-btn:42px; --vp-bar:48px; color:#fff; -webkit-user-select:none; user-select:none; touch-action:manipulation}
-.player:not(.vp-on) :is(.vp-ui,.vp-cap,.vp-fx,.vp-spin,.vp-toast,.vp-seekfx){display:none}
+.player:not(.vp-on) :is(.vp-ui,.vp-cap,.vp-fx,.vp-spin,.vp-toast,.vp-seekfx,.vp-err){display:none}
 .player.vp-on video{cursor:pointer}
 /* curseur masqué après un moment sans mouvement de la souris (classe posée par le script, tout le lecteur : image, commandes, barre) */
 .player.vp-on.cursor-off,.player.vp-on.cursor-off *{cursor:none!important}
@@ -53,6 +53,21 @@
 .vp-rng::-moz-range-track{height:3px; border-radius:3px; background:linear-gradient(to right,#fff 0 var(--p),rgba(255,255,255,.3) var(--p) 100%)}
 .vp-rng::-webkit-slider-thumb{-webkit-appearance:none; width:12px; height:12px; margin-top:-4.5px; border:0; border-radius:50%; background:#fff}
 .vp-rng::-moz-range-thumb{width:12px; height:12px; border:0; border-radius:50%; background:#fff}
+
+/* pastille de vitesse (hors vitesse normale) : un clic ouvre le choix de la vitesse */
+.vp-rate{margin-left:8px; padding:2px 9px; border:1px solid rgba(255,255,255,.55); border-radius:99px; background:transparent; color:#fff; font:inherit; font-size:12px; font-weight:700; line-height:1.5; cursor:pointer; pointer-events:auto; flex:none}
+.vp-rate:hover,.vp-rate:focus-visible{background:rgba(255,255,255,.18); outline:none}
+.vp-rate[hidden]{display:none}
+
+/* vidéo illisible (format non pris en charge, impossible à décoder) : un écran explique et propose quoi faire ; la barre reste utilisable au-dessus */
+.vp-err{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:24px 24px calc(var(--vp-bar) + 16px); background:rgba(0,0,0,.84); text-align:center; pointer-events:auto}
+.vp-err[hidden]{display:none}
+.vp-err p{margin:0; max-width:34ch; font-size:clamp(14px,2.6cqw,19px); line-height:1.4}
+.vp-err-act{display:flex; flex-wrap:wrap; justify-content:center; gap:10px}
+.vp-eb{padding:9px 18px; border:0; border-radius:99px; background:rgba(255,255,255,.16); color:#fff; font:inherit; font-weight:600; cursor:pointer}
+.vp-eb:hover,.vp-eb:focus-visible{background:rgba(255,255,255,.3); outline:none}
+.vp-eb:first-child{background:var(--vp-accent)}
+.vp-eb[hidden]{display:none}
 
 /* mode compact (écran tactile OU lecteur étroit) : gros boutons au centre (précédente, -10 s, lecture, +10 s, suivante),
    pas de volume (touches de l'appareil) ; les doublons de la barre disparaissent */
@@ -146,6 +161,7 @@
   .vp-mid .vp-b[data-act='prev'] svg,.vp-mid .vp-b[data-act='next'] svg,.vp-mid .vp-skb svg{width:22px; height:22px}
   .vp-time{font-size:12px}
 }
+@container vp (max-width:380px){.vp-rate{display:none}}      /* très petit lecteur : la vitesse reste dans le menu */
 @container vp (max-width:300px){                  /* lecteur minuscule : le bouton muet reste, le curseur s'ouvre au toucher du bouton */
   .vp-vol .vp-rng{width:0; margin:0; opacity:0}
   .vp-vol:focus-within .vp-rng,.vp-vol.peek .vp-rng{width:56px; margin:0 6px 0 0; opacity:1}

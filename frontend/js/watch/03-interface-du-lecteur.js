@@ -14,6 +14,8 @@ class PlayerUI {
   static CURSOR_HIDE_AFTER = 3000;                       // ms sans mouvement de la souris avant de masquer le curseur
   static ORIENTATIONS = ['auto', 'landscape', 'portrait'];
   static ORIENTATION_LABELS = {auto: 'Automatique', landscape: 'Paysage', portrait: 'Portrait'};
+  static FRAME = 1 / 30;                                 // s : pas de l'avance image par image (la cadence réelle de la vidéo n'est pas connue du navigateur)
+  static VOLUME_STEP = 0.05;                             // molette sur le volume, flèches haut / bas
   static FILL_MAX_CROP = 0.25;                           // mode cinéma en plein écran : l'image remplit l'écran si cela en rogne au plus ce quart
 
   #box = $('vbox');
@@ -38,6 +40,7 @@ class PlayerUI {
   #tracks = [...(video.textTracks ?? [])];
   #active = null;                                        // piste de sous-titres affichée
   #lastSecond = -1;
+  #loadedOnce = false;                                   // les métadonnées de la vidéo ont été reçues (sinon une erreur de format est définitive)
   #skipFx = {left: {total: 0, timer: 0}, right: {total: 0, timer: 0}};
 
   /** `settings` : PlaybackSettings (volume, vitesse) ; `host` : VideoPlayer (vidéo suivante / précédente). */
@@ -48,6 +51,8 @@ class PlayerUI {
     this.#box.classList.add('vp-on');
     this.#bindButtons();
     this.#bindPlayback();
+    this.#bindError();
+    this.#bindWheel();
     this.#bindSeekBar();
     this.#bindGestures();
     this.#bindAutoHide();
@@ -58,6 +63,7 @@ class PlayerUI {
     this.#bindOrientation();
     this.#bindShape();
     this.#renderPlay();
+    this.#renderRate();
     this.#renderBusy();
     this.#renderProgress();
   }
@@ -135,6 +141,13 @@ class PlayerUI {
     this.#box.classList.toggle('fill', fill);
   }
 
+  /** Image par image (en pause) : avance ou recule d'une image (≈ 1/30 s). */
+  step(direction) {
+    if (!video.paused || !Number.isFinite(video.duration)) return;
+    video.currentTime = Math.min(Math.max(0, video.duration - END_GUARD), Math.max(0, video.currentTime + direction * PlayerUI.FRAME));
+    this.#poke();
+  }
+
   async togglePip() {
     try {
       if (document.pictureInPictureElement) await document.exitPictureInPicture();
@@ -202,6 +215,7 @@ class PlayerUI {
         cc: () => this.toggleCaptions(),
         settings: () => this.#toggleMenu(),
         theater: () => this.toggleTheater(),
+        rate: () => this.#openMenu('speed'),
         pip: () => this.togglePip(),
         fs: () => this.toggleFullscreen(),
       })[button.dataset.act]?.();
@@ -219,6 +233,7 @@ class PlayerUI {
     for (const type of ['waiting', 'seeking', 'seeked', 'canplay', 'playing', 'loadstart', 'loadeddata', 'error', 'emptied']) on(type, () => this.#renderBusy());
     on('play', () => { this.#poke(); this.#kick(); });
     on('playing', () => this.#kick());
+    on('ratechange', () => this.#renderRate());
     on('pause', () => this.#poke());                    // en pause : les commandes se masquent aussi après un moment d'inactivité (réapparition au moindre mouvement)
     on('ended', () => this.#showUI());                  // vidéo terminée : les commandes (Revoir, suivante) restent affichées
     on('timeupdate', () => { if (!this.#raf) this.#renderProgress(); });
@@ -535,8 +550,59 @@ class PlayerUI {
     this.#active = null;
     this.#cap.replaceChildren();
     this.#lastSecond = -1;
+    this.#loadedOnce = false;
+    this.#hideError();
     this.#bindCaptions();
     this.#poke();
+  }
+
+  /* ----- vidéo illisible ----- */
+  /** Format non pris en charge dès le départ, ou vidéo qui ne se décode pas : un écran explique le problème et propose quoi faire
+      (sans cela, le lecteur resterait noir et muet). */
+  #bindError() {
+    video.addEventListener('loadedmetadata', () => { this.#loadedOnce = true; this.#hideError(); });
+    video.addEventListener('error', () => {
+      if (video.error?.code === 4 && !this.#loadedOnce) this.showError("Ce format vidéo n'est pas pris en charge par ce navigateur.");
+    });
+    $('vp-err').addEventListener('click', (e) => {
+      const action = e.target.closest?.('[data-err]')?.dataset.err;
+      if (action === 'retry') { this.#hideError(); video.load(); play(); }
+      else if (action === 'download') this.download();
+      else if (action === 'next') this.#host.next();
+    });
+  }
+
+  showError(message) {
+    $('vp-err-msg').textContent = message;
+    $('vp-err').hidden = false;
+    const next = $('vp-err').querySelector('[data-err="next"]');
+    if (next) next.hidden = items.length < 2;            // « Vidéo suivante » n'a pas de sens pour une vidéo seule
+    this.#box.classList.add('failed');
+    this.#showUI();
+  }
+
+  #hideError() {
+    $('vp-err').hidden = true;
+    this.#box.classList.remove('failed');
+  }
+
+  /** Molette : sur le bouton de volume (toujours), et sur l'image en plein écran (hors plein écran, la molette fait défiler la page). */
+  #bindWheel() {
+    const change = (e) => {
+      e.preventDefault();
+      this.#settings.setVolume(this.#settings.volume + (e.deltaY < 0 ? PlayerUI.VOLUME_STEP : -PlayerUI.VOLUME_STEP));
+      this.peekVolume();
+    };
+    $('vp-volbox')?.addEventListener('wheel', change, {passive: false});
+    this.#box.addEventListener('wheel', (e) => { if (this.#fullscreen && e.target === video) change(e); }, {passive: false});
+  }
+
+  /** Pastille de vitesse dans la barre (visible seulement hors vitesse normale) : un clic ouvre le choix de la vitesse. */
+  #renderRate() {
+    const badge = $('vp-rate');
+    const rate = video.playbackRate;
+    badge.hidden = rate === 1;
+    badge.textContent = `${String(rate).replace('.', ',')}×`;
   }
 
   /* ----- sous-titres : dessinés par le script, au-dessus de la barre de commandes ----- */

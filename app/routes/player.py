@@ -58,7 +58,7 @@ class PlayerRoutes(BaseHandler):
         page = render("player/watch", q=q, tracks=tracks, title=escape(p.stem),
                       folder_href=folder_url(p.parent), folder_name=escape(folder_name),
                       size=size, ext=p.suffix[1:].upper(),
-                      sub_chips=sub_chips, rows="".join(video_row(v, p) for v in siblings))
+                      sub_chips=sub_chips, pos=f"{idx + 1} / {len(siblings)}", rows="".join(video_row(v, p) for v in siblings))
         cfg = {"key": f"{config.ROOT_ID}:{rel_of(p)}", "folder": f"{config.ROOT_ID}:{rel_of(p.parent)}",
                "index": idx, "download": f"/raw?dl=1&f={q}",
                "items": [{"f": rel_of(x), "u": watch_url(x)} for x in siblings]}

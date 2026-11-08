@@ -9,6 +9,14 @@
     <div class='vp-fx' id='vp-fx'></div>
     <div class='vp-spin'>{{ icon loader 56 }}</div>
     <div class='vp-toast' id='vp-toast' role='status'></div>
+    <div class='vp-err' id='vp-err' role='alert' hidden>
+      <p id='vp-err-msg'></p>
+      <div class='vp-err-act'>
+        <button class='vp-eb' type='button' data-err='retry'>Réessayer</button>
+        <button class='vp-eb' type='button' data-err='download'>Télécharger</button>
+        <button class='vp-eb' type='button' data-err='next'>Vidéo suivante</button>
+      </div>
+    </div>
     <div class='vp-ui' id='vp-ui'>
       <div class='vp-top'>{{ title }}</div>
       <div class='vp-mid'>
@@ -36,6 +44,7 @@
               <input id='vp-vol' class='vp-rng' type='range' min='0' max='100' value='100' step='1' aria-label='Volume'>
             </span>
             <span class='vp-time' id='vp-time'>0:00 / 0:00</span>
+            <button id='vp-rate' class='vp-rate' type='button' data-act='rate' title='Vitesse de lecture' aria-label='Vitesse de lecture' hidden></button>
           </div>
           <div class='vp-r'>
             <button id='vp-shuffle' class='vp-b vp-mode' type='button' data-act='shuffle' title='Lecture aléatoire (S)' aria-label='Lecture aléatoire' aria-pressed='false'>{{ icon shuffle 24 }}</button>
@@ -58,8 +67,8 @@
       <span class='chip muted'>{{ size }} · {{ ext }}</span>
 {{ sub_chips }}
     </div>
-    <p class='hint'>Raccourcis : <kbd>K</kbd> lecture/pause · <kbd>J</kbd> <kbd>L</kbd> ±10 s · <kbd>{{ icon arrow_left 12 ik }}</kbd> <kbd>{{ icon arrow_right 12 ik }}</kbd> ±5 s · <kbd>0</kbd>–<kbd>9</kbd> aller à 0–90 % · <kbd>N</kbd> suivante · <kbd>P</kbd> précédente (ou début) · <kbd>S</kbd> aléatoire · <kbd>R</kbd> répétition (aucune, tout, une vidéo) · <kbd>{{ icon arrow_up 12 ik }}</kbd> <kbd>{{ icon arrow_down 12 ik }}</kbd> volume · <kbd>&lt;</kbd> <kbd>&gt;</kbd> vitesse · <kbd>M</kbd> muet · <kbd>C</kbd> sous-titres · <kbd>T</kbd> mode cinéma · <kbd>I</kbd> image dans l'image · <kbd>F</kbd> plein écran</p>
+    <p class='hint'>Raccourcis : <kbd>K</kbd> lecture/pause · <kbd>J</kbd> <kbd>L</kbd> ±10 s · <kbd>{{ icon arrow_left 12 ik }}</kbd> <kbd>{{ icon arrow_right 12 ik }}</kbd> ±5 s · <kbd>0</kbd>–<kbd>9</kbd> aller à 0–90 % · <kbd>Fin</kbd> fin de la vidéo · <kbd>N</kbd> suivante · <kbd>P</kbd> précédente (ou début) · <kbd>S</kbd> aléatoire · <kbd>R</kbd> répétition (aucune, tout, une vidéo) · <kbd>{{ icon arrow_up 12 ik }}</kbd> <kbd>{{ icon arrow_down 12 ik }}</kbd> volume · <kbd>&lt;</kbd> <kbd>&gt;</kbd> vitesse · <kbd>,</kbd> <kbd>.</kbd> image par image (en pause) · molette sur le volume · <kbd>M</kbd> muet · <kbd>C</kbd> sous-titres · <kbd>T</kbd> mode cinéma · <kbd>I</kbd> image dans l'image · <kbd>F</kbd> plein écran</p>
   </section>
   </div>
-  <aside class='next'><h2>Dans ce dossier</h2><div class='list'>{{ rows }}</div></aside>
+  <aside class='next'><h2>Dans ce dossier <span class='cnt' id='list-pos'>{{ pos }}</span></h2><div class='list'>{{ rows }}</div></aside>
 </main>
