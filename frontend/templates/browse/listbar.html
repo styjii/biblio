@@ -1,0 +1,16 @@
+{# Barre de la liste : filtres par catégorie (à gauche, inchangés) et tri (à droite). #}
+<div class='listbar'>{{ filters }}
+  <div class='sortbox'>
+    <label class='sortsel'><span>Trier par</span>
+      <select id='sort'>
+        <option value='name'>Nom</option>
+        <option value='date'>Date de modification</option>
+        <option value='size'>Taille</option>
+        <option value='duration'>Durée</option>
+        <option value='type'>Type</option>
+      </select>
+    </label>
+    <button id='sort-dir' class='sortdir' type='button'></button>
+  </div>
+  <div id='sort-note' class='sortnote' hidden>Calcul des durées…</div>
+</div>

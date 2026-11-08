@@ -9,7 +9,8 @@ from app.filesystem import card_kind, list_dir, rel_of
 from app.icons import ICONS, icon
 from app.templating import render
 from app.utils import js_json
-from app.views.cards import GROUPS, file_card, group_of, video_card
+from app.media import media
+from app.views.cards import GROUPS, file_card, group_of, sort_attrs, video_card
 from app.views.layout import doc_close, doc_open, lock_script, topbar
 from app.routes.base import BaseHandler
 
@@ -27,13 +28,15 @@ class BrowseRoutes(BaseHandler):
         if folders is None or files is None:
             self.send_error(403, "Accès refusé")
             return
+        attached = media.attached_subtitles(files)             # sous-titres d'une vidéo du dossier : ouverts depuis le lecteur, pas listés
+        files = [f for f in files if f not in attached]
 
         relative = current.relative_to(config.ROOT)
         title = relative.name if relative.parts else (config.ROOT.name or "Bibliothèque")
-        grouped = {}
-        for f in files:
-            kind = card_kind(f)
-            grouped.setdefault(group_of(kind), []).append((f, kind))
+        cards = [(f, card_kind(f)) for f in files]            # dans l'ordre du serveur (nom, ordre naturel) : c'est le tri par défaut
+        counts = {}
+        for _, kind in cards:
+            counts[group_of(kind)] = counts.get(group_of(kind), 0) + 1
         has_content = bool(folders or files)
         parts = []
 
@@ -52,10 +55,13 @@ class BrowseRoutes(BaseHandler):
                             upload_button=render("browse/upload_button")
                             if config.PASSWORD and not config.READONLY else ""))
 
-        if files:
-            chips = "".join(render("browse/filter_chip", key=key, label=label, count=len(grouped[key]))
-                            for key, label in GROUPS if key in grouped)
-            parts.append(render("browse/filters", total=len(files), chips=chips))
+        if files or len(folders) > 1:                          # filtres par catégorie (s'il y a des fichiers) et tri
+            filters = ""
+            if files:
+                chips = "".join(render("browse/filter_chip", key=key, label=label, count=counts[key])
+                                for key, label in GROUPS if key in counts)
+                filters = render("browse/filters", total=len(files), chips=chips)
+            parts.append(render("browse/listbar", filters=filters))
 
         if relative.parts:
             parent = quote(relative.parent.as_posix(), safe="")
@@ -67,21 +73,16 @@ class BrowseRoutes(BaseHandler):
             items = "".join(render("browse/folder_item", dot=" dot" if d.name.startswith(".") else "",
                                    target=quote(rel_of(d), safe=""), title=escape(d.name, quote=True),
                                    more_button=render("components/more_button"),
-                                   name_key=escape(d.name.casefold(), quote=True), name=escape(d.name))
-                            for d in folders)
+                                   name_key=escape(d.name.casefold(), quote=True), name=escape(d.name),
+                                   sort=sort_attrs(d, i))
+                            for i, d in enumerate(folders))
             parts.append(render("browse/section", key="folders", label="Dossiers", count=len(folders),
                                 layout="grid", content=items))
 
-        for key, label in GROUPS:
-            items = grouped.get(key)
-            if not items:
-                continue
-            if key == "video":
-                layout, content = "videos", "".join(video_card(f) for f, _ in items)
-            else:
-                layout, content = "grid", "".join(file_card(f, k) for f, k in items)
-            parts.append(render("browse/section", key=key, label=label, count=len(items),
-                                layout=layout, content=content))
+        if cards:                                              # une seule liste, tous types mélangés ; les filtres masquent par catégorie
+            content = "".join(video_card(f, i) if k == "video" else file_card(f, k, i) for i, (f, k) in enumerate(cards))
+            parts.append(render("browse/section", key="files", label="Fichiers", count=len(cards),
+                                layout="files", content=content))
 
         parts.append(render("browse/no_result") if has_content else render("browse/empty_folder"))
         page = (doc_open(f"{title} — Ma bibliothèque") + topbar(has_content, True)

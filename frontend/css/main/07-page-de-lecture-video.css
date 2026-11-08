@@ -58,6 +58,6 @@ a.chip:hover,a.btn:hover{background:var(--accent-soft); border-color:var(--accen
 @media(max-width:999px) and (max-height:500px){      /* écran en paysage : pas de place pour un lecteur fixe, le lecteur tient dans la hauteur de l'écran */
   .player{position:relative; top:auto; max-height:calc(100vh - var(--tb) - 8px)}
 }
-@media(max-width:640px){.videos{grid-template-columns:1fr}.rthumb{width:132px}}
+@media(max-width:640px){.videos,.files{grid-template-columns:1fr}.rthumb{width:132px}}
 
 

@@ -19,6 +19,8 @@
     try {
       const {duration, pos = 0} = await (await fetch(`/meta?f=${card.dataset.f}`)).json();
       if (!duration) return;
+      card.dataset.dur = String(duration);                  // lue aussi par le tri « Durée » de la liste
+      document.dispatchEvent(new Event('biblio:duration'));
       const label = card.querySelector('.dur');
       if (label) { label.textContent = fmt(duration); label.hidden = false; }
       showBar(card, pos, duration);

@@ -41,6 +41,15 @@ def group_of(kind):
             "image": "media", "audio": "media", "binary": "other"}[kind]
 
 
+def _stat(p):
+    """-> (taille en octets, date de modification en secondes) ; (0, 0) si illisible."""
+    try:
+        st = p.stat()
+        return st.st_size, int(st.st_mtime)
+    except OSError:
+        return 0, 0
+
+
 def _size_of(p):
     try:
         return fmt_size(p.stat().st_size)
@@ -48,7 +57,14 @@ def _size_of(p):
         return ""
 
 
-def file_card(p, kind):
+def sort_attrs(p, order):
+    """Attributs data-* lus par le tri de la liste (frontend/js/browse/00-tri.js) : rang par nom (ordre naturel du serveur),
+    octets, date, extension."""
+    nbytes, mtime = _stat(p)
+    return f"data-order='{order}' data-bytes='{nbytes}' data-mtime='{mtime}' data-ext='{escape(p.suffix[1:].casefold(), quote=True)}'"
+
+
+def file_card(p, kind, order=0):
     ic, cls = icon_for(p, kind)
     if kind == "pdf":
         cls = "pdf"
@@ -63,18 +79,18 @@ def file_card(p, kind):
                   dot=" dot" if p.name.startswith(".") else "",
                   href=href, q=q, kind=kind,
                   md=" data-md='1'" if p.suffix.lower() in MD_EXT else "",
-                  direct=1 if direct else 0, ic=ic, cls=cls,
+                  direct=1 if direct else 0, ic=ic, cls=cls, group=group_of(kind), sort=sort_attrs(p, order),
                   title=escape(p.name, quote=True), size=size, ext=ext,
                   name_key=escape(p.name.casefold(), quote=True),
                   icon_svg=icon(ic, 22), name=escape(p.name),
                   right=render("components/more_button" if has_menu else "components/go_chevron"))
 
 
-def video_card(p):
+def video_card(p, order=0):
     q = quote(rel_of(p), safe="")
     return render("components/video_card",
                   dot=" dot" if p.name.startswith(".") else "",
-                  q=q, key=media.key(p), title=escape(p.name, quote=True),
+                  q=q, key=media.key(p), title=escape(p.name, quote=True), sort=sort_attrs(p, order),
                   size=_size_of(p), ext=p.suffix[1:].upper(),
                   name_key=escape(p.name.casefold(), quote=True),
                   more_button=render("components/more_button"), name=escape(p.stem))

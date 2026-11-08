@@ -33,7 +33,7 @@ async function runAction({url, button, errorBox, onLocked, networkError}) {
   }
 }
 
-/** La liste : fichiers cachés, recherche par nom et filtres par type, avec les compteurs. */
+/** La liste : fichiers cachés, recherche par nom et filtres par catégorie, avec les compteurs. Le tri est dans ListSort (00-tri.js). */
 class Listing {
   #active = 'all';
   #hiddenToggle = $('toggle-hidden');
@@ -68,14 +68,15 @@ class Listing {
     let shown = 0;
     const perGroup = {};
     document.querySelectorAll('.section').forEach((section) => {
-      const group = section.dataset.group;
-      const count = [...section.querySelectorAll('[data-name]')].filter((el) => this.#isShown(el)).length;
-      const off = group !== 'folders' && this.#active !== 'all' && group !== this.#active;
+      const items = [...section.querySelectorAll('[data-name]')].filter((el) => this.#isShown(el));
+      if (section.dataset.group === 'files') {         // une seule liste : le filtre masque les fichiers des autres catégories
+        for (const el of section.querySelectorAll('[data-name]')) el.classList.toggle('off', this.#active !== 'all' && el.dataset.group !== this.#active);
+        for (const el of items) perGroup[el.dataset.group] = (perGroup[el.dataset.group] ?? 0) + 1;
+      }
+      const count = items.filter((el) => !el.classList.contains('off')).length;
       section.querySelector('.count').textContent = count;
-      section.classList.toggle('off', off);
       section.hidden = count === 0;
-      if (group !== 'folders') perGroup[group] = count;
-      if (!off) shown += count;
+      shown += count;
     });
     document.querySelectorAll('.fchip').forEach((chip) => {
       const group = chip.dataset.g;

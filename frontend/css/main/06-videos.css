@@ -1,5 +1,7 @@
 /* ---------- Vidéos : cartes avec miniature ---------- */
 .videos{display:grid; gap:18px; grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}
+/* liste unique (tous types mélangés) : fiches de fichiers et vignettes vidéo dans la même grille ; une fiche moins haute est centrée */
+.files{display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}
 .vcard{
   display:block; border-radius:14px; overflow:hidden; background:var(--surface);
   border:1px solid var(--border); box-shadow:var(--shadow);

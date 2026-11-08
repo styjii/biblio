@@ -9,6 +9,7 @@ from html import escape
 
 from app import config
 from app.filesystem import rel_of
+from app.filetypes import VIDEO_EXT
 from app.utils import natural_key
 
 
@@ -188,6 +189,13 @@ class MediaLibrary:
         except OSError:
             pass
         return subs
+
+    def attached_subtitles(self, files):
+        """Sous-titres de `files` rattachés à une vidéo de la même liste (même règle que `find_subtitles`) -> ensemble de chemins."""
+        prefixes = tuple(f.stem.casefold() + "." for f in files if f.suffix.lower() in VIDEO_EXT)
+        if not prefixes:
+            return set()
+        return {f for f in files if f.suffix.lower() in self.SUB_TYPES and f.name.casefold().startswith(prefixes)}
 
     @staticmethod
     def srt_to_vtt(text):
