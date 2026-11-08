@@ -7,7 +7,7 @@
     Aucune commande n'est placée hors du lecteur.
     Sans ce script, les commandes natives restent. */
 class PlayerUI {
-  static HIDE_AFTER = 3000;                              // ms sans activité avant de masquer les commandes (pendant la lecture)
+  static HIDE_AFTER = 3000;                              // ms sans activité avant de masquer les commandes (en lecture comme en pause)
   static SKIP = 10;                                      // s : double tape sur un côté de l'image
   static DOUBLE_TAP = 300;                               // ms entre deux tapes d'un double tape
   static CURSOR_HIDE_AFTER = 3000;                       // ms sans mouvement de la souris avant de masquer le curseur
@@ -191,8 +191,8 @@ class PlayerUI {
     for (const type of ['waiting', 'seeking', 'seeked', 'canplay', 'playing', 'loadstart', 'loadeddata', 'error', 'emptied']) on(type, () => this.#renderBusy());
     on('play', () => { this.#poke(); this.#kick(); });
     on('playing', () => this.#kick());
-    on('pause', () => this.#showUI());
-    on('ended', () => this.#showUI());
+    on('pause', () => this.#poke());                    // en pause : les commandes se masquent aussi après un moment d'inactivité (réapparition au moindre mouvement)
+    on('ended', () => this.#showUI());                  // vidéo terminée : les commandes (Revoir, suivante) restent affichées
     on('timeupdate', () => { if (!this.#raf) this.#renderProgress(); });
     for (const type of ['durationchange', 'loadedmetadata', 'seeked', 'emptied']) on(type, () => this.#renderProgress());
     for (const type of ['progress', 'loadedmetadata', 'seeked', 'canplay', 'emptied']) on(type, () => this.#renderBuffered());
@@ -388,11 +388,11 @@ class PlayerUI {
 
   get #hidden() { return this.#box.classList.contains('ui-off'); }
   #showUI() { clearTimeout(this.#hideTimer); this.#box.classList.remove('ui-off'); this.#kick(); }
-  #hideUI() { if (!video.paused && this.#menu.hidden && !this.#dragging) this.#box.classList.add('ui-off'); }
+  #hideUI() { if (!video.ended && this.#menu.hidden && !this.#dragging) this.#box.classList.add('ui-off'); }
   #poke() { this.#showUI(); this.#schedule(); }
   #schedule(delay = PlayerUI.HIDE_AFTER) {
     clearTimeout(this.#hideTimer);
-    if (video.paused || !this.#menu.hidden || this.#overBar || this.#dragging) return;
+    if (video.ended || !this.#menu.hidden || this.#overBar || this.#dragging) return;
     this.#hideTimer = setTimeout(() => this.#hideUI(), delay);
   }
   #toggleUI() { if (this.#hidden) this.#poke(); else this.#hideUI(); }
