@@ -50,7 +50,6 @@
 .modes{display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:8px; margin-top:12px}
 .vol{display:flex; align-items:center; justify-content:center; gap:8px; margin:8px auto 0; max-width:280px}
 .vol input{flex:1; min-width:0}
-#b-play svg,#b-prev svg,#b-next svg{fill:currentColor}
 #b-play.loading svg{fill:none; animation:lspin .9s linear infinite}
 @keyframes lspin{to{transform:rotate(360deg)}}
 .lmsg{min-height:18px; margin-top:10px; text-align:center}

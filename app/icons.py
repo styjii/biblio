@@ -49,16 +49,16 @@ ICONS.update({
     "trash": '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>'
              '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/>'
              '<line x1="14" x2="14" y1="11" y2="17"/>',
-    "play": '<polygon points="6 3 20 12 6 21 6 3"/>',
-    "next": '<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/>',
-    "prev": '<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/>',
+    "play": '<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/>',
+    "next": '<path d="M21 4v16"/><path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/>',
+    "prev": '<path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z"/><path d="M3 20V4"/>',
     "more": '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
     "dashboard": '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/>'
                  '<rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
     "monitor": '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
     "ban": '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
     "lock": '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
-    "pause": '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+    "pause": '<rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/>',
     "shuffle": '<path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22"/>'
                '<path d="M2 6h1.972a4 4 0 0 1 3.6 2.2"/><path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"/>',
     "repeat": '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
@@ -74,13 +74,13 @@ ICONS.update({
     "arrow_right": '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
     "arrow_up": '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
     "arrow_down": '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
-    # retour / avance de 10 s : flèche circulaire + « 10 » (texte SVG, pas un emoji)
+    # retour / avance de 10 s : flèche circulaire + « 10 » dessiné en traits (même style que les autres icônes)
     "back10": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'
-              '<text x="12" y="15.4" text-anchor="middle" font-size="7.5" font-weight="700" '
-              'font-family="system-ui,sans-serif" stroke="none" fill="currentColor">10</text>',
+              '<g stroke-width="1.6"><path d="M8.6 10.9 10.2 9.6v5.2"/>'
+              '<rect x="12.4" y="9.6" width="3.6" height="5.2" rx="1.8"/></g>',
     "fwd10": '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>'
-             '<text x="12" y="15.4" text-anchor="middle" font-size="7.5" font-weight="700" '
-             'font-family="system-ui,sans-serif" stroke="none" fill="currentColor">10</text>',
+              '<g stroke-width="1.6"><path d="M8.6 10.9 10.2 9.6v5.2"/>'
+              '<rect x="12.4" y="9.6" width="3.6" height="5.2" rx="1.8"/></g>',
     "loader": '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
     # indicateur « en cours de lecture » (3 barres animées en CSS)
     "eq": '<path class="b1" d="M6 20V11"/><path class="b2" d="M12 20V4"/><path class="b3" d="M18 20V14"/>',

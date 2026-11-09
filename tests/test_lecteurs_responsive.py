@@ -11,8 +11,10 @@ class LecteurVideoTests(unittest.TestCase):
         for gone in ("wbar", "wctrls", "id='autonext'", "id='w-", "class='switch'"):
             self.assertNotIn(gone, html)
         self.assertNotIn("raw?dl=1", html)                        # le téléchargement est dans le menu des paramètres
-        for act in ("prev", "back", "fwd", "next", "shuffle", "repeat", "settings"):
+        for act in ("prev", "back", "fwd", "next", "settings"):
             self.assertIn(f"data-act='{act}'", html)
+        for act in ("shuffle", "repeat", "cc", "rate"):               # ces commandes sont dans le menu des paramètres, pas dans la barre
+            self.assertNotIn(f"data-act='{act}'", html)
 
     def test_script_sans_reference_aux_anciens_boutons(self):
         self.assertIsNone(re.search(r"\$\('w-", assets.WATCH_JS))
@@ -26,7 +28,7 @@ class LecteurVideoTests(unittest.TestCase):
     def test_mode_compact_du_lecteur(self):
         self.assertIn("@container vp (max-width:640px)", assets.CSS)      # lecteur étroit : commandes principales au centre
         self.assertIn(".vp-mid{display:flex}", assets.CSS)
-        for cls in (".vp-sk", ".vp-mode", ".vp-skb"):
+        for cls in (".vp-sk", ".vp-skb"):
             self.assertIn(cls, assets.CSS)
 
 
@@ -37,9 +39,25 @@ class LecteurVideoTests(unittest.TestCase):
                 continue
             for part in (p.strip() for p in selector.split(",")):
                 self.assertNotIn(part, (".vp-vol", ".vp-vol .vp-b", "#vp-mute", "[data-act='mute']"), selector)
-        # curseur toujours visible en mode compact (pas de survol au doigt)
-        self.assertRegex(assets.CSS, r"@container vp \(max-width:640px\)\{[^@]*\.vp-vol \.vp-rng\{[^}]*opacity:1")
+        # curseur toujours visible à l'écran tactile (pas de survol au doigt)
         self.assertRegex(assets.CSS, r"@media\(pointer:coarse\)\{[^@]*\.vp-vol \.vp-rng\{[^}]*opacity:1")
+
+    def test_meme_barre_de_volume_partout(self):
+        """Une seule barre de volume (celle du plein écran) : aucune règle de taille de lecteur ne la modifie, et sa largeur est un jeton unique."""
+        css = assets.CSS
+        self.assertIn("--vp-volw:80px", css)
+        self.assertEqual(css.count("width:var(--vp-volw)"), 2)               # survol (souris) et écran tactile : même largeur
+        for block in re.findall(r"@container vp \([^)]*\)\{((?:[^{}]|\{[^{}]*\})*)\}", css):
+            self.assertNotIn(".vp-rng", block)                                 # ni largeur, ni pastille, ni opacité propres à un lecteur étroit
+
+    def test_icones_toutes_en_contour(self):
+        """Lecture, pause, précédent, suivant : contour arrondi comme l'icône du volume, jamais remplis."""
+        for text in (assets.CSS, assets.LISTEN_CSS):
+            self.assertNotIn("fill:currentColor", text)
+        from app.icons import ICONS
+        for name in ("play", "pause", "next", "prev", "back10", "fwd10"):
+            self.assertNotIn("<polygon", ICONS[name], name)
+            self.assertNotIn("<text", ICONS[name], name)
 
     def test_volume_impose_par_le_systeme(self):
         self.assertIn("classList.toggle('fixed'", assets.WATCH_JS)         # iPhone : curseur retiré, bouton muet conservé

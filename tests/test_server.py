@@ -195,11 +195,11 @@ class ServerTests(unittest.TestCase):
         try:
             status, page = self.get("/watch?f=clip-b.mp4")
             self.assertEqual(status, 200)
-            # toutes les commandes sont dans le lecteur : -10 s / +10 s, aléatoire, répétition, volume, paramètres, plein écran…
-            for ident in ("vbox", "vp-ui", "vp-seek", "vp-back", "vp-fwd", "vp-shuffle", "vp-repeat", "vp-mute", "vp-vol",
+            # toutes les commandes sont dans le lecteur : -10 s / +10 s, volume, paramètres (aléatoire, répétition, vitesse… y sont), plein écran…
+            for ident in ("vbox", "vp-ui", "vp-seek", "vp-back", "vp-fwd", "vp-mute", "vp-vol",
                           "vp-menu", "vp-toast", "vp-set", "vp-fs"):
                 self.assertIn(f"id='{ident}'", page)
-            for act in ("prev", "next", "back", "fwd", "shuffle", "repeat", "settings"):
+            for act in ("prev", "next", "back", "fwd", "settings"):
                 self.assertIn(f"data-act='{act}'", page)
             # … et plus rien à l'extérieur : ni barre de commandes, ni lecture automatique, ni lien de téléchargement
             for ident in ("w-prev", "w-next", "w-back", "w-fwd", "w-shuffle", "w-repeat", "autonext"):

@@ -1,8 +1,8 @@
 
-/** Interface du lecteur façon YouTube : barre de commandes qui se masque, position (plage chargée, survol, glissement),
+/** Interface du lecteur (conventions de YouTube, Video.js et Plyr) : barre de commandes qui se masque, position (plage chargée, survol, glissement),
     précédente / suivante, ±10 s, aléatoire, répétition, volume, plein écran, mode cinéma, image dans l'image, et menu des
     paramètres (lecture automatique, aléatoire, répétition, vitesse, sous-titres, téléchargement), gestes tactiles
-    (tape = commandes, double tape sur les côtés = ±10 s ; glisser de haut en bas = volume, de gauche à droite = position), verrouillage des
+    (tape = commandes, double tape sur les côtés = ±10 s), verrouillage des
     commandes (bouton qui devient bouton de déverrouillage), orientation du plein écran (automatique selon la vidéo,
     paysage ou portrait), masquage du curseur de la souris après un moment d'inactivité, mode cinéma (bouton toujours présent :
     page large sur grand écran, lecteur adapté à la forme de la vidéo sur écran étroit, image sans bandes noires en plein écran).
@@ -17,14 +17,8 @@ class PlayerUI {
   static ORIENTATION_LABELS = {auto: 'Automatique', landscape: 'Paysage', portrait: 'Portrait'};
   static FRAME = 1 / 30;                                 // s : pas de l'avance image par image (la cadence réelle de la vidéo n'est pas connue du navigateur)
   static VOLUME_STEP = 0.05;                             // molette sur le volume, flèches haut / bas
-  static SWIPE_START = 12;                               // px : en deçà, le doigt n'a pas assez bougé pour un glissement (c'est une tape)
-  static SWIPE_EDGE = 24;                                // px : pas de glissement qui part du bord de l'écran (gestes du système : retour, notifications)
-  static VOLUME_SWIPE = 0.8;                             // part de la hauteur du lecteur qui fait passer le volume de 0 à 100 %
-  static VOLUME_SWIPE_MIN = 200;                         // px : hauteur retenue au minimum (petit lecteur)
-  static SEEK_SWIPE = [60, 300];                         // s : durée parcourue par un glissement sur toute la largeur du lecteur (1/10 de la vidéo, entre ces bornes)
-  static HUD_HIDE = 600;                                 // ms : l'indicateur d'un glissement reste affiché un instant après le geste
+  static MENU_FIT = [[false, 0], [false, 38], [false, 34], [false, 30], [true, 34], [true, 30], [true, 26]];      // [deux colonnes, hauteur d'une ligne en px (0 : celle du CSS)] essayés dans l'ordre
   static LOCK_PEEK = 3000;                               // ms : le bouton de déverrouillage reste affiché après une tape sur l'écran verrouillé
-  static LANDSCAPE_PHONE = matchMedia('(max-width:999px) and (max-height:500px)');      // même condition que le CSS : le lecteur occupe tout l'écran et la page défile en le touchant
   static FILL_MAX_CROP = 0.25;                           // mode cinéma en plein écran : l'image remplit l'écran si cela en rogne au plus ce quart
 
   #box = $('vbox');
@@ -51,11 +45,7 @@ class PlayerUI {
   #lastSecond = -1;
   #loadedOnce = false;                                   // les métadonnées de la vidéo ont été reçues (sinon une erreur de format est définitive)
   #skipFx = {left: {total: 0, timer: 0}, right: {total: 0, timer: 0}};
-  #hud = $('vp-hud');                                    // indicateur d'un glissement (volume, position visée)
-  #hudTimer = 0;
-  #hudIcon = '';
-  #swipe = null;                                         // glissement au doigt en cours : {id, x, y, mode: '' | 'volume' | 'seek' | 'ignored', …}
-  #swiped = false;                                       // le dernier toucher était un glissement : la tape qui suit son relâchement n'en est pas une
+  #pinched = false;                                      // un pincement à deux doigts vient d'avoir lieu : la tape qui suit son relâchement n'en est pas une
   #locked = false;                                       // commandes verrouillées (boutons, gestes et clavier sont sans effet)
   #lockTimer = 0;
 
@@ -70,7 +60,6 @@ class PlayerUI {
     this.#bindError();
     this.#bindWheel();
     this.#bindSeekBar();
-    this.#bindSwipe();                                   // avant #bindGestures : il signale un glissement avant que la tape ne soit traitée
     this.#bindGestures();
     this.#bindAutoHide();
     this.#bindCursor();
@@ -80,8 +69,8 @@ class PlayerUI {
     this.#bindOrientation();
     this.#bindShape();
     this.#bindLock();
+    this.#bindTips();
     this.#renderPlay();
-    this.#renderRate();
     this.#renderBusy();
     this.#renderProgress();
   }
@@ -198,18 +187,8 @@ class PlayerUI {
     say('Téléchargement lancé.');
   }
 
-  /** Reflète l'aléatoire et la répétition sur les boutons de la barre (et dans le menu s'il est ouvert). */
-  renderModes({shuffle, repeat}) {
-    const names = {off: 'désactivée', all: 'toutes les vidéos', one: 'cette vidéo'};
-    const shuffleButton = $('vp-shuffle');
-    const repeatButton = $('vp-repeat');
-    shuffleButton.classList.toggle('on', shuffle);
-    shuffleButton.setAttribute('aria-pressed', String(shuffle));
-    setIcon(repeatButton, repeat === 'one' ? 'repeat1' : 'repeat');
-    repeatButton.classList.toggle('on', repeat !== 'off');
-    repeatButton.setAttribute('aria-pressed', String(repeat !== 'off'));
-    repeatButton.setAttribute('aria-label', `Répétition : ${names[repeat]}`);
-    repeatButton.title = `Répétition (R) : ${{off: 'aucune', all: 'tout', one: 'une vidéo'}[repeat]}`;
+  /** L'aléatoire et la répétition ne vivent que dans le menu des paramètres : s'il est ouvert, ses lignes sont mises à jour. */
+  renderModes() {
     if (!this.#menu.hidden) this.#renderMenu(true);
   }
 
@@ -235,13 +214,9 @@ class PlayerUI {
         next: () => this.#host.next(),
         back: () => this.skip(-PlayerUI.SKIP),
         fwd: () => this.skip(PlayerUI.SKIP),
-        shuffle: () => this.#host.setShuffle(!this.#host.shuffle),
-        repeat: () => this.#host.cycleRepeat(),
         mute: () => { this.#settings.toggleMute(); this.peekVolume(); },       // en très petit lecteur, le curseur s'ouvre un instant
-        cc: () => this.toggleCaptions(),
         settings: () => this.#toggleMenu(),
         theater: () => this.toggleTheater(),
-        rate: () => this.#openMenu('speed'),
         pip: () => this.togglePip(),
         fs: () => this.toggleFullscreen(),
       })[button.dataset.act]?.();
@@ -259,7 +234,7 @@ class PlayerUI {
     for (const type of ['waiting', 'seeking', 'seeked', 'canplay', 'playing', 'loadstart', 'loadeddata', 'error', 'emptied']) on(type, () => this.#renderBusy());
     on('play', () => { this.#poke(); this.#kick(); });
     on('playing', () => this.#kick());
-    on('ratechange', () => this.#renderRate());
+    on('ratechange', () => { if (!this.#menu.hidden) this.#renderMenu(true); });      // la vitesse n'est affichée que dans le menu
     on('pause', () => this.#poke());                    // en pause : les commandes se masquent aussi après un moment d'inactivité (réapparition au moindre mouvement)
     on('ended', () => this.#showUI());                  // vidéo terminée : les commandes (Revoir, suivante) restent affichées
     on('timeupdate', () => { if (!this.#raf) this.#renderProgress(); });
@@ -323,6 +298,7 @@ class PlayerUI {
       const half = this.#tip.offsetWidth / 2;
       this.#tip.textContent = PlayerUI.clock(ratio * (video.duration || 0));
       this.#tip.style.left = `${Math.min(rect.width - half, Math.max(half, ratio * rect.width))}px`;
+      seek.style.setProperty('--h', ratio);                // plage « fantôme » jusqu'au point visé
       return ratio;
     };
     seek.addEventListener('pointerdown', (e) => {
@@ -400,10 +376,19 @@ class PlayerUI {
     const box = this.#box;
     let lastTap = {time: 0, zone: ''};
     let tapTimer = 0;
+    const fingers = new Set();
+    box.addEventListener('pointerdown', (e) => {         // deux doigts posés (pincement) : aucune tape ne doit en sortir
+      if (e.pointerType === 'mouse') return;
+      fingers.add(e.pointerId);
+      if (fingers.size > 1) this.#pinched = true;
+    });
+    const lift = (e) => { fingers.delete(e.pointerId); if (!fingers.size) setTimeout(() => { this.#pinched = false; }, 0); };
+    box.addEventListener('pointercancel', lift);
     box.addEventListener('pointerup', (e) => {
       this.#pointerType = e.pointerType;
+      lift(e);
       if (e.target !== video) return;                    // boutons, barre, menu : ils ont leurs propres actions
-      if (this.#swiped) { this.#swiped = false; return; }                 // fin d'un glissement (volume, position) : ce n'est pas une tape
+      if (this.#pinched) return;                                          // relâchement d'un pincement (zoom) : ce n'est pas une tape
       if (this.#locked) { this.#peekLock(); return; }                     // verrouillé : une tape n'affiche que le bouton de déverrouillage
       if (!this.#menu.hidden) { this.#closeMenu(); return; }
       if (e.pointerType === 'mouse') { if (e.button === 0) this.toggle(); return; }
@@ -425,103 +410,14 @@ class PlayerUI {
     });
   }
 
-  /* ----- glissements au doigt : haut / bas = volume, gauche / droite = position ----- */
-  /** Un seul doigt, posé sur l'image (pas sur une commande) et pas au bord de l'écran. Le sens est choisi dès que le doigt a assez bougé, puis il ne change plus.
-      Volume : relatif au volume de départ (revenir au point de départ le rétablit). Position : appliquée au relâchement (la vidéo ne bouge qu'une fois),
-      l'indicateur montre l'écart et la position visée. Pendant le geste, les commandes s'effacent. Verrouillé : aucun glissement. */
-  #bindSwipe() {
-    const box = this.#box;
-    const fingers = new Set();
-    const end = (e, commit) => {
-      fingers.delete(e.pointerId);
-      const swipe = this.#swipe;
-      if (swipe?.id !== e.pointerId) return;
-      this.#swipe = null;
-      this.#swiped = swipe.mode !== '';
-      box.classList.remove('swiping');
-      if (swipe.mode === 'seek' && commit) this.seekTo(swipe.target);
-      this.#hideHud();
-    };
-    box.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse') return;
-      fingers.add(e.pointerId);
-      this.#swiped = false;
-      if (fingers.size > 1) { this.#swiped = true; this.#cancelSwipe(); return; }      // deux doigts (pincement) : pas un glissement
-      const edge = PlayerUI.SWIPE_EDGE;
-      const inside = e.clientX >= edge && e.clientX <= innerWidth - edge && e.clientY >= edge && e.clientY <= innerHeight - edge;
-      if (e.target !== video || this.#locked || !this.#menu.hidden || !inside) return;
-      this.#swipe = {id: e.pointerId, x: e.clientX, y: e.clientY, mode: '', volume: this.#settings.volume, from: video.currentTime, target: video.currentTime, percent: -1};
-    });
-    box.addEventListener('pointermove', (e) => {
-      const swipe = this.#swipe;
-      if (swipe?.id !== e.pointerId) return;
-      let dx = e.clientX - swipe.x;
-      let dy = e.clientY - swipe.y;
-      if (!swipe.mode) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) < PlayerUI.SWIPE_START) return;
-        const horizontal = Math.abs(dx) > Math.abs(dy);
-        const possible = horizontal ? Number.isFinite(video.duration) : this.#volumeSwipe;
-        swipe.mode = !possible ? 'ignored' : horizontal ? 'seek' : 'volume';
-        swipe.x = e.clientX;                             // le geste part d'ici : pas de saut au démarrage
-        swipe.y = e.clientY;
-        dx = dy = 0;
-        if (possible) box.classList.add('swiping');
-      }
-      if (swipe.mode === 'volume') this.#swipeVolume(swipe, dy);
-      else if (swipe.mode === 'seek') this.#swipeSeek(swipe, dx);
-    });
-    box.addEventListener('pointerup', (e) => end(e, true));
-    box.addEventListener('pointercancel', (e) => end(e, false));
-    this.#syncSwipeMode();
-    PlayerUI.LANDSCAPE_PHONE.addEventListener?.('change', () => this.#syncSwipeMode());
-  }
-
-  /** Glissement vertical possible ? Volume réglable par le script (pas sur iPhone) et lecteur qui n'a pas besoin du geste pour faire défiler la page. */
-  get #volumeSwipe() { return this.#box.classList.contains('vswipe') && !$('vp-volbox')?.classList.contains('fixed'); }
-
-  /** Classe « vswipe » (CSS : touch-action) : tous les glissements appartiennent au lecteur, sauf sur un téléphone en paysage hors plein écran
-      (le lecteur y couvre l'écran : seuls les glissements horizontaux sont pris, la page défile toujours en verticale). */
-  #syncSwipeMode() { this.#box.classList.toggle('vswipe', this.#fullscreen || !PlayerUI.LANDSCAPE_PHONE.matches); }
-
-  #swipeVolume(swipe, dy) {
-    const range = Math.max(PlayerUI.VOLUME_SWIPE_MIN, this.#box.clientHeight * PlayerUI.VOLUME_SWIPE);
-    const percent = Math.round(Math.min(1, Math.max(0, swipe.volume - dy / range)) * 100);
-    if (percent !== swipe.percent) {                     // une seule écriture par pourcent (le volume est mémorisé à chaque changement)
-      swipe.percent = percent;
-      this.#settings.setVolume(percent / 100);
-    }
-    this.#showHud('volume', `${percent} %`, {icon: percent ? 'volume' : 'mute', fill: percent});
-  }
-
-  #swipeSeek(swipe, dx) {
-    const [min, max] = PlayerUI.SEEK_SWIPE;
-    const span = Math.min(max, Math.max(min, video.duration / 10));                        // s parcourues sur toute la largeur du lecteur
-    const limit = Math.max(video.duration - END_GUARD, swipe.from);                        // jamais jusqu'à la toute fin (sauf si on y est déjà)
-    swipe.target = Math.min(limit, Math.max(0, swipe.from + (dx / Math.max(1, this.#box.clientWidth)) * span));
-    const delta = Math.round(swipe.target - swipe.from);
-    this.#showHud('seek', `${delta < 0 ? '−' : '+'}${PlayerUI.clock(Math.abs(delta))}`, {sub: `${PlayerUI.clock(swipe.target)} / ${PlayerUI.clock(video.duration)}`});
-  }
-
-  /** Indicateur au centre du lecteur pendant un glissement : volume (icône, valeur, jauge) ou position visée (écart, nouvelle position). */
-  #showHud(kind, text, {sub = '', icon = '', fill = 0} = {}) {
-    clearTimeout(this.#hudTimer);
-    this.#hud.dataset.kind = kind;
-    if (icon !== this.#hudIcon) { this.#hudIcon = icon; $('vp-hud-ic').innerHTML = icons[icon] ?? ''; }
-    $('vp-hud-tx').textContent = text;
-    $('vp-hud-sub').textContent = sub;
-    this.#hud.style.setProperty('--f', `${fill}%`);
-    this.#hud.classList.add('on');
-  }
-
-  #hideHud() {
-    clearTimeout(this.#hudTimer);
-    this.#hudTimer = setTimeout(() => this.#hud.classList.remove('on'), PlayerUI.HUD_HIDE);
-  }
-
-  #cancelSwipe() {
-    this.#swipe = null;
-    this.#box.classList.remove('swiping');
-    this.#hideHud();
+  /* ----- infobulles ----- */
+  /** Le « title » de chaque bouton passe dans « data-tip » (infobulle dessinée par le CSS, au style du lecteur) : pas de seconde infobulle du navigateur.
+      Les libellés changent en cours de route (lecture / pause, plein écran…) : un observateur reprend chaque nouveau « title ». */
+  #bindTips() {
+    const take = (el) => { if (el.title) { el.dataset.tip = el.title; el.removeAttribute('title'); } };
+    for (const el of this.#box.querySelectorAll?.('[title]') ?? []) take(el);
+    if (typeof MutationObserver === 'undefined') return;
+    new MutationObserver((records) => { for (const {target} of records) take(target); }).observe(this.#box, {subtree: true, attributes: true, attributeFilter: ['title']});
   }
 
   /* ----- verrouillage des commandes ----- */
@@ -536,13 +432,17 @@ class PlayerUI {
     clearTimeout(this.#lockTimer);
     this.#box.classList.remove('lock-peek');
     this.#renderLock();
-    if (force) { this.#closeMenu(); this.#cancelSwipe(); this.#peekLock(); } else this.#poke();
+    this.#rememberLock();
+    if (force) { this.#closeMenu(); this.#peekLock(); } else this.#poke();
     say(force ? 'Commandes verrouillées' : 'Commandes déverrouillées');
   }
 
-  /** Vidéo suivante ouverte sur une nouvelle page : le verrouillage est transmis à cette page seulement (pas aux ouvertures suivantes). */
-  carryLock() {
-    try { if (this.#locked) sessionStorage.setItem('vl:lock', '1'); } catch { /* verrouillage non transmis */ }
+  /** Le verrouillage est conservé pour les vidéos suivantes : à chaque changement d'état il est mémorisé pour l'onglet (vidéo suivante ou précédente,
+      lecture automatique, rechargement de la page, retour du navigateur…). Il tombe avec l'onglet ; seul le bouton de déverrouillage (ou la touche V) l'enlève. */
+  #rememberLock() {
+    try {
+      if (this.#locked) sessionStorage.setItem('vl:lock', '1'); else sessionStorage.removeItem('vl:lock');
+    } catch { /* verrouillage non mémorisé */ }
   }
 
   #bindLock() {
@@ -551,10 +451,10 @@ class PlayerUI {
       this.toggleLock();
       if (e.detail > 0) button.blur();
     });
-    let carried = false;
-    try { carried = sessionStorage.getItem('vl:lock') === '1'; sessionStorage.removeItem('vl:lock'); } catch { /* rien à reprendre */ }
+    let kept = false;
+    try { kept = sessionStorage.getItem('vl:lock') === '1'; } catch { /* rien à reprendre */ }
     this.#renderLock();
-    if (carried) this.toggleLock(true);
+    if (kept) this.toggleLock(true);
   }
 
   #renderLock() {
@@ -606,7 +506,7 @@ class PlayerUI {
 
   get #hidden() { return this.#box.classList.contains('ui-off'); }
   #showUI() { clearTimeout(this.#hideTimer); this.#box.classList.remove('ui-off'); this.#kick(); }
-  #hideUI() { if (!video.ended && this.#menu.hidden && !this.#dragging && !this.#swipe?.mode) this.#box.classList.add('ui-off'); }
+  #hideUI() { if (!video.ended && this.#menu.hidden && !this.#dragging) this.#box.classList.add('ui-off'); }
   #poke() { this.#showUI(); this.#schedule(); }
   #schedule(delay = PlayerUI.HIDE_AFTER) {
     clearTimeout(this.#hideTimer);
@@ -621,6 +521,7 @@ class PlayerUI {
       if (!this.#menu.hidden && !e.target.closest('.vp-menu,[data-act="settings"]')) this.#closeMenu();
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !this.#menu.hidden) this.#closeMenu(); });
+    addEventListener('resize', () => { if (!this.#menu.hidden) this.#fitMenu(); });              // rotation, redimensionnement : le menu est réajusté
     this.#menu.addEventListener('keydown', (e) => {      // flèches haut / bas : on parcourt les choix
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       const choices = [...this.#menu.querySelectorAll('button')];
@@ -715,7 +616,19 @@ class PlayerUI {
       row('Télécharger la vidéo', {icon: ic('download'), onClick: () => { this.#closeMenu(); this.download(); }});
     }
     this.#menu.replaceChildren(...rows);
+    this.#fitMenu();
     (rows[focused] ?? rows[0])?.focus({preventScroll: true});
+  }
+
+  /** Le menu ne défile jamais : on resserre les lignes, puis on passe sur deux colonnes, jusqu'à ce que tout tienne dans la place disponible
+      (petit lecteur, téléphone en paysage). Mesure : le contenu dépasse-t-il la hauteur visible du menu ? */
+  #fitMenu() {
+    const menu = this.#menu;
+    for (const [columns, row] of PlayerUI.MENU_FIT) {
+      menu.classList.toggle('cols', columns);
+      if (row) menu.style.setProperty('--vp-row', `${row}px`); else menu.style.removeProperty?.('--vp-row');
+      if (!(menu.scrollHeight > menu.clientHeight + 1)) return;
+    }
   }
 
   /** Autre vidéo chargée dans le même lecteur (plein écran conservé) : sous-titres relus, menu fermé, barre affichée un instant. */
@@ -773,17 +686,8 @@ class PlayerUI {
     this.#box.addEventListener('wheel', (e) => { if (this.#fullscreen && e.target === video) change(e); }, {passive: false});
   }
 
-  /** Pastille de vitesse dans la barre (visible seulement hors vitesse normale) : un clic ouvre le choix de la vitesse. */
-  #renderRate() {
-    const badge = $('vp-rate');
-    const rate = video.playbackRate;
-    badge.hidden = rate === 1;
-    badge.textContent = `${String(rate).replace('.', ',')}×`;
-  }
-
   /* ----- sous-titres : dessinés par le script, au-dessus de la barre de commandes ----- */
   #bindCaptions() {
-    $('vp-cc').hidden = !this.#tracks.length;
     for (const track of this.#tracks) track.addEventListener('cuechange', () => this.#renderCue());
     const wanted = this.#tracks.findIndex((t) => t.label === prefs.get('cc', '\u0000'));
     this.#selectTrack(wanted, false);                    // dernière langue choisie, sinon aucun sous-titre (comme YouTube)
@@ -793,9 +697,9 @@ class PlayerUI {
   #selectTrack(index, byUser) {
     this.#tracks.forEach((track, i) => { track.mode = i === index ? 'hidden' : 'disabled'; });
     this.#active = this.#tracks[index] ?? null;
-    $('vp-cc').setAttribute('aria-pressed', String(Boolean(this.#active)));
     this.#renderCue();
     if (!byUser) return;
+    if (!this.#menu.hidden) this.#renderMenu(true);
     prefs.set('cc', this.#active?.label ?? '');
     say(this.#active ? `Sous-titres : ${this.#active.label}` : 'Sous-titres désactivés');
   }
@@ -854,7 +758,6 @@ class PlayerUI {
       button.title = full ? 'Quitter le plein écran (F)' : 'Plein écran (F)';
       if (full) this.#applyOrientation(); else screen.orientation?.unlock?.();
       this.#fit();
-      this.#syncSwipeMode();
       if (!this.#menu.hidden) this.#openMenu(this.#panel === 'orient' && !full ? 'root' : this.#panel);   // l'option d'orientation n'existe qu'en plein écran
       this.#poke();
     };

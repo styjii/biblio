@@ -24,11 +24,21 @@ class VideoPlayer {
     document.addEventListener('keydown', (e) => this.#onKey(e));
     this.#setupMediaSession();
 
+    this.#bindDock();
     const list = this.#listMode();
     if (list === 'aside') document.querySelector('.row.cur')?.scrollIntoView({block: 'nearest'});
     else if (list === 'fixed') requestAnimationFrame(() => this.#revealCurrent(false));      // la liste défile sous le lecteur fixe : la vidéo en cours doit y être visible
     this.#order.restore(this.#shuffle);
     this.#renderModes();
+  }
+
+  /** Mobile à lecteur fixe : l'en-tête de la liste se colle sous le lecteur et ses informations (CSS : « .next h2 »). La hauteur de cette zone varie (forme de la vidéo,
+      titre sur 1 ou 2 lignes, mode cinéma) : elle est publiée en variable CSS « --dock-h » à chaque changement. */
+  #bindDock() {
+    const dock = $('dock');
+    const watch = $('watch');
+    if (!dock || !watch || typeof ResizeObserver === 'undefined') return;
+    new ResizeObserver(() => watch.style.setProperty('--dock-h', `${dock.offsetHeight}px`)).observe(dock);
   }
 
   /* ----- enchaînement ----- */
@@ -50,7 +60,6 @@ class VideoPlayer {
   #leaveTo(target) {
     if (window.Transfers) window.Transfers.open(items[target].u);     // pendant un envoi, nouvel onglet : l'envoi n'est pas interrompu
     else {
-      this.#ui.carryLock();                                // commandes verrouillées : la page suivante l'est aussi
       this.#navigate(items[target].u);
     }
   }
@@ -128,7 +137,8 @@ class VideoPlayer {
     const row = document.querySelector('.list .row.cur');
     const dock = $('dock');
     if (!row || !dock) return;
-    const limit = dock.getBoundingClientRect().bottom + 8;                  // le haut de la zone visible de la liste
+    const head = document.querySelector('.next h2');                        // l'en-tête de la liste est collé sous le lecteur : il fait partie de la zone fixe
+    const limit = dock.getBoundingClientRect().bottom + (head?.offsetHeight ?? 0) + 8;      // le haut de la zone visible de la liste
     const rect = row.getBoundingClientRect();
     if (rect.top < limit || rect.bottom > innerHeight) {
       const calm = matchMedia('(prefers-reduced-motion:reduce)').matches;

@@ -64,13 +64,18 @@ a.chip:hover,a.btn:hover{background:var(--accent-soft); border-color:var(--accen
    ensemble sous la barre du haut ; la liste défile dessous et la vidéo en cours y est mise en évidence (frontend/js/watch/04-commandes.js) */
 @media(max-width:999px) and (min-height:501px){
   .watch{grid-template-areas:"dock" "next"}
-  .dock{display:block; grid-area:dock; position:sticky; top:var(--tb); z-index:10; margin:0 -16px; background:var(--bg); border-bottom:1px solid var(--border)}
+  .dock{display:block; grid-area:dock; position:sticky; top:var(--tb); z-index:10; margin:0 -16px; background:var(--bg); border-bottom:1px solid var(--border); touch-action:pinch-zoom}
   .dock .player{position:relative; top:auto; margin:0; width:100%}
   .dock .info{display:block; padding:9px 16px 10px}
   .dock .vtitle{margin:0; font-size:16px; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
   .dock .chips{margin-top:8px; gap:8px; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none}
   .dock .chips::-webkit-scrollbar{display:none}
+  .dock .chips{touch-action:pan-x}                      /* seule la rangée de pastilles défile (horizontalement) */
   .dock .chip{padding:5px 12px; font-size:13px; flex-shrink:0; white-space:nowrap}
+  /* zone fixe = lecteur + informations + en-tête de la liste (« Dans ce dossier ») : l'en-tête se colle juste sous le lecteur (--dock-h : sa hauteur, mesurée par
+     le script, qui varie avec la forme de la vidéo, le titre sur 1 ou 2 lignes, le mode cinéma) et la liste défile dessous. Aucun glissement du doigt commencé
+     dans cette zone (lecteur, informations, en-tête) ne fait défiler la liste ni la page : « touch-action » ne laisse que le zoom par pincement. */
+  .next h2{position:sticky; top:calc(var(--tb) + var(--dock-h,0px)); z-index:9; margin:0 -16px 12px; padding:11px 16px 10px; background:var(--bg); border-bottom:1px solid var(--border); touch-action:pinch-zoom}
   /* mode cinéma sur écran étroit : le lecteur prend la forme de la vidéo (--vp-ar, posée par le script), sans dépasser la hauteur utile de l'écran */
   .watch.theater .dock .player{aspect-ratio:var(--vp-ar,16/9); max-height:calc(100vh - var(--tb) - 190px); max-height:calc(100dvh - var(--tb) - 190px)}
   .row.flash{animation:rowflash 1.4s ease-out}

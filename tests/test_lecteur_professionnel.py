@@ -89,14 +89,13 @@ class ClavierEtMoletteTests(unittest.TestCase):
 class VitesseEtListeTests(unittest.TestCase):
     js = assets.WATCH_JS
 
-    def test_pastille_de_vitesse(self):
-        self.assertIn("id='vp-rate'", WATCH_HTML)
-        self.assertIn("data-act='rate'", WATCH_HTML)
-        render = self.js.split("#renderRate() {")[1].split("\n  }\n")[0]
-        self.assertIn("badge.hidden = rate === 1;", render)
-        self.assertIn("rate: () => this.#openMenu('speed'),", self.js)
-        self.assertIn("on('ratechange', () => this.#renderRate());", self.js)
-        self.assertIn("@container vp (max-width:380px){.vp-rate{display:none}}", assets.CSS)
+    def test_vitesse_seulement_dans_le_menu(self):
+        """La vitesse se règle dans le menu des paramètres (et aux touches < et >) : plus de pastille dans la barre."""
+        self.assertNotIn("vp-rate", WATCH_HTML)
+        self.assertNotIn("vp-rate", assets.CSS)
+        self.assertNotIn("#renderRate", self.js)
+        self.assertIn("row('Vitesse de lecture', {icon: ic('gauge')", self.js)
+        self.assertIn("on('ratechange', () => { if (!this.#menu.hidden) this.#renderMenu(true); });", self.js)
 
     def test_position_dans_la_liste(self):
         self.assertIn("<span class='cnt' id='list-pos'>{{ pos }}</span>", WATCH_HTML)

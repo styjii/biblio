@@ -68,19 +68,30 @@ aucune requête supplémentaire. Après une modification du front-end, relancer 
 
 ### Lecteur vidéo (`/watch`)
 
-Lecteur façon YouTube : les commandes natives du navigateur sont remplacées par une interface dessinée par
+Lecteur professionnel (conventions de YouTube, Video.js et Plyr) : les commandes natives du navigateur sont remplacées par une interface dessinée par
 `frontend/js/watch/03-interface-du-lecteur.js` (classe `PlayerUI`) et `frontend/css/main/12-lecteur-youtube.css`.
 Sans JavaScript, l'attribut `controls` de la balise `<video>` garde les commandes natives.
 
-- **Commandes** : lecture/pause, vidéo suivante, volume, durée, sous-titres (CC), paramètres (vitesse de 0,25× à 2×,
-  sous-titres, lecture automatique), mode cinéma (grand écran), image dans l'image, plein écran.
+- **Style** : tout se règle avec les jetons `--vp-…` en tête de `12-lecteur-youtube.css` (accent, tailles, verre dépoli,
+  rayon, animation) ; infobulles au survol, gros bouton de lecture au centre en pause (souris), aperçu du point visé sur
+  la barre de position, menus animés, interrupteurs et cases cochées.
+  Volume : bouton muet en carré arrondi d'accent tant que le curseur est ouvert, curseur à la partie réglée en accent et pastille blanche,
+  identiques à toutes les tailles (ouvert au survol sur grand écran, toujours visible au doigt ou en lecteur étroit) ;
+  les barres de position et de volume ont le même rail ; les réglages activés portent le même point
+  d'accent. Le menu des paramètres ne défile jamais : ses lignes se resserrent, puis passent sur deux colonnes si le
+  lecteur est petit (téléphone en paysage, par exemple).
+- **Zone fixe (mobile, portrait)** : le lecteur, ses informations (titre, dossier, taille) et l'en-tête de la liste
+  (« Dans ce dossier ») restent collés en haut de l'écran ; seules les lignes de la liste défilent dessous. Un glissement
+  du doigt commencé dans cette zone ne fait défiler ni la liste ni la page (hors gestes du lecteur : volume, position).
+- **Commandes** : la barre ne porte que lecture/pause, précédente/suivante, ±10 s, volume, durée, paramètres, mode cinéma
+  (grand écran), image dans l'image et plein écran, quelle que soit la taille du lecteur. Tout ce que contient le menu des
+  paramètres (lecture automatique, aléatoire, répétition, vitesse de 0,25× à 2×, sous-titres, orientation, téléchargement)
+  n'est jamais répété dans la barre ; les raccourcis `S`, `R`, `C`, `<` et `>` restent actifs.
 - **Barre de position** : plage chargée, bulle de temps au survol, glissement à la souris ou au doigt, redessinée à
   chaque image pendant la lecture. Les commandes se masquent après 3 s en lecture et réapparaissent au mouvement.
 - **Tactile** : tape = afficher/masquer les commandes, double tape à gauche/droite = ∓10 s (les sauts s'additionnent),
-  double tape au centre = lecture/pause ; gros boutons précédente / lecture / suivante au centre.
-  Glisser de haut en bas = volume, de gauche à droite = avancer, de droite à gauche = reculer (la position est appliquée
-  au relâchement ; un indicateur montre le volume ou l'écart). Sur un téléphone en paysage hors plein écran, seul le
-  glissement horizontal est pris (la page défile en verticale).
+  double tape au centre = lecture/pause ; gros boutons précédente / lecture / suivante au centre. Aucun glissement du doigt
+  (volume, position) : le volume se règle avec le curseur du lecteur, la position avec la barre de position.
 - **Verrouillage** : le bouton cadenas (en haut à droite, touche `V`) désactive boutons, gestes et clavier ; il devient
   alors un bouton de déverrouillage, affiché 3 s après chaque tape sur l'écran. La lecture continue et le verrouillage
   suit la lecture automatique vers la vidéo suivante.
