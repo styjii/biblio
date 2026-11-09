@@ -78,6 +78,12 @@ Sans JavaScript, l'attribut `controls` de la balise `<video>` garde les commande
   chaque image pendant la lecture. Les commandes se masquent après 3 s en lecture et réapparaissent au mouvement.
 - **Tactile** : tape = afficher/masquer les commandes, double tape à gauche/droite = ∓10 s (les sauts s'additionnent),
   double tape au centre = lecture/pause ; gros boutons précédente / lecture / suivante au centre.
+  Glisser de haut en bas = volume, de gauche à droite = avancer, de droite à gauche = reculer (la position est appliquée
+  au relâchement ; un indicateur montre le volume ou l'écart). Sur un téléphone en paysage hors plein écran, seul le
+  glissement horizontal est pris (la page défile en verticale).
+- **Verrouillage** : le bouton cadenas (en haut à droite, touche `V`) désactive boutons, gestes et clavier ; il devient
+  alors un bouton de déverrouillage, affiché 3 s après chaque tape sur l'écran. La lecture continue et le verrouillage
+  suit la lecture automatique vers la vidéo suivante.
 - **Clavier** : `K`/espace, `J`/`L` ±10 s, flèches ±5 s et volume, `0`–`9` (0–90 %), `N`/`P`, `S`, `R`, `<`/`>`,
   `M`, `C`, `T`, `I`, `F`.
 - **Responsive** : la taille des commandes suit la largeur du lecteur (requêtes de conteneur), donc aussi en plein

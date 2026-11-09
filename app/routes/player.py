@@ -63,7 +63,8 @@ class PlayerRoutes(BaseHandler):
                "index": idx, "download": f"/raw?dl=1&f={q}",
                "items": [{"f": rel_of(x), "u": watch_url(x)} for x in siblings]}
         wico = {n: icon(n, 24) for n in ("repeat", "repeat1", "volume", "mute", "play", "pause", "replay", "expand", "shrink",
-                                         "chevron_left", "check", "queue", "shuffle", "gauge", "captions", "download", "orientation")}
+                                         "chevron_left", "check", "queue", "shuffle", "gauge", "captions", "download", "orientation",
+                                         "lock", "unlock")}
         self.send_html(doc_open(f"{p.stem} — Ma bibliothèque") + topbar(False) + page
                        + doc_close(f"window.WCFG = {js_json(cfg)}; window.WICO = {js_json(wico)}; "
                                    f"{THEME_JS}{DECORATE_JS}{HOVER_PREVIEW_JS}{PROGRESS_JS}{WATCH_JS}"))

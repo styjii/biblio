@@ -49,7 +49,10 @@ class VideoPlayer {
 
   #leaveTo(target) {
     if (window.Transfers) window.Transfers.open(items[target].u);     // pendant un envoi, nouvel onglet : l'envoi n'est pas interrompu
-    else this.#navigate(items[target].u);
+    else {
+      this.#ui.carryLock();                                // commandes verrouillées : la page suivante l'est aussi
+      this.#navigate(items[target].u);
+    }
   }
 
   /** Charge une autre vidéo sans changer de page : on lit d'abord sa page (titre, sous-titres, adresse du fichier), puis on remplace
@@ -211,6 +214,10 @@ class VideoPlayer {
     const lower = key.toLowerCase();
     if (tag === 'button' && (key === ' ' || key === 'Enter')) return;
     if (e.target.closest?.('.vp-menu')) return;            // dans le menu des paramètres, les flèches parcourent les choix
+    if (this.#ui.locked) {                                 // commandes verrouillées : seule la touche V répond (elle déverrouille)
+      if (lower === 'v') { this.#ui.toggleLock(); e.preventDefault(); }
+      return;
+    }
     // le curseur de volume garde ses flèches natives
     if (e.target.id === 'vp-vol' && key.startsWith('Arrow')) return;
 
@@ -235,6 +242,7 @@ class VideoPlayer {
       t: () => this.#ui.toggleTheater(),
       i: () => this.#ui.togglePip(),
       c: () => this.#ui.toggleCaptions(),
+      v: () => this.#ui.toggleLock(),
       '<': () => this.#settings.stepRate(-1),
       ',': () => (video.paused ? this.#ui.step(-1) : this.#settings.stepRate(-1)),       // en pause : image précédente ; en lecture : plus lentement
       '>': () => this.#settings.stepRate(1),

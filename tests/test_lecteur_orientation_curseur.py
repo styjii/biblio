@@ -37,7 +37,7 @@ class OrientationPleinEcranTests(unittest.TestCase):
     def test_icone_fournie_au_lecteur(self):
         self.assertIn("orientation", ICONS)
         player = (config.HERE / "app/routes/player.py").read_text(encoding="utf-8")
-        self.assertIn('"download", "orientation")', player)
+        self.assertIn('"download", "orientation"', player)
 
 
 class MasquageCurseurTests(unittest.TestCase):

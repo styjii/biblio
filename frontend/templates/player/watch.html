@@ -1,4 +1,4 @@
-{# Lecteur vidéo : lecteur façon YouTube. TOUTES les commandes sont dans le lecteur (précédente / suivante, ±10 s, aléatoire, répétition, vitesse, sous-titres, lecture automatique, téléchargement : barre de commandes et menu des paramètres, dessinés par frontend/js/watch/03-interface-du-lecteur.js ; l'attribut « controls » ne sert que de repli sans script). Sous le lecteur : titre, informations et liste du dossier. Le lecteur et ses informations sont réunis dans « dock » : sur mobile, en mode fixe, ils restent collés ensemble sous la barre du haut (07-page-de-lecture-video.css). #}
+{# Lecteur vidéo : lecteur façon YouTube. TOUTES les commandes sont dans le lecteur (précédente / suivante, ±10 s, aléatoire, répétition, vitesse, sous-titres, lecture automatique, téléchargement : barre de commandes et menu des paramètres, dessinés par frontend/js/watch/03-interface-du-lecteur.js ; l'attribut « controls » ne sert que de repli sans script). Gestes tactiles (volume, position) : indicateur « vp-hud ». Verrouillage : bouton « vp-lock », hors de la couche des commandes (il reste utilisable quand elles sont masquées). Sous le lecteur : titre, informations et liste du dossier. Le lecteur et ses informations sont réunis dans « dock » : sur mobile, en mode fixe, ils restent collés ensemble sous la barre du haut (07-page-de-lecture-video.css). #}
 <main class='watch' id='watch'>
   <div class='dock' id='dock'>
   <div class='player' id='vbox'>
@@ -9,6 +9,7 @@
     <div class='vp-fx' id='vp-fx'></div>
     <div class='vp-spin'>{{ icon loader 56 }}</div>
     <div class='vp-toast' id='vp-toast' role='status'></div>
+    <div class='vp-hud' id='vp-hud' aria-hidden='true'><span class='vp-hud-ic' id='vp-hud-ic'></span><span class='vp-hud-tx' id='vp-hud-tx'></span><span class='vp-hud-sub' id='vp-hud-sub'></span><span class='vp-hud-bar'><i></i></span></div>
     <div class='vp-err' id='vp-err' role='alert' hidden>
       <p id='vp-err-msg'></p>
       <div class='vp-err-act'>
@@ -59,6 +60,7 @@
       </div>
       <div class='vp-menu' id='vp-menu' role='menu' hidden></div>
     </div>
+    <button id='vp-lock' class='vp-lock' type='button' title='Verrouiller les commandes (V)' aria-label='Verrouiller les commandes' aria-pressed='false'>{{ icon lock 22 }}</button>
   </div>
   <section class='info'>
     <h1 class='vtitle'>{{ title }}</h1>
@@ -67,7 +69,7 @@
       <span class='chip muted'>{{ size }} · {{ ext }}</span>
 {{ sub_chips }}
     </div>
-    <p class='hint'>Raccourcis : <kbd>K</kbd> lecture/pause · <kbd>J</kbd> <kbd>L</kbd> ±10 s · <kbd>{{ icon arrow_left 12 ik }}</kbd> <kbd>{{ icon arrow_right 12 ik }}</kbd> ±5 s · <kbd>0</kbd>–<kbd>9</kbd> aller à 0–90 % · <kbd>Fin</kbd> fin de la vidéo · <kbd>N</kbd> suivante · <kbd>P</kbd> précédente (ou début) · <kbd>S</kbd> aléatoire · <kbd>R</kbd> répétition (aucune, tout, une vidéo) · <kbd>{{ icon arrow_up 12 ik }}</kbd> <kbd>{{ icon arrow_down 12 ik }}</kbd> volume · <kbd>&lt;</kbd> <kbd>&gt;</kbd> vitesse · <kbd>,</kbd> <kbd>.</kbd> image par image (en pause) · molette sur le volume · <kbd>M</kbd> muet · <kbd>C</kbd> sous-titres · <kbd>T</kbd> mode cinéma · <kbd>I</kbd> image dans l'image · <kbd>F</kbd> plein écran</p>
+    <p class='hint'>Raccourcis : <kbd>K</kbd> lecture/pause · <kbd>J</kbd> <kbd>L</kbd> ±10 s · <kbd>{{ icon arrow_left 12 ik }}</kbd> <kbd>{{ icon arrow_right 12 ik }}</kbd> ±5 s · <kbd>0</kbd>–<kbd>9</kbd> aller à 0–90 % · <kbd>Fin</kbd> fin de la vidéo · <kbd>N</kbd> suivante · <kbd>P</kbd> précédente (ou début) · <kbd>S</kbd> aléatoire · <kbd>R</kbd> répétition (aucune, tout, une vidéo) · <kbd>{{ icon arrow_up 12 ik }}</kbd> <kbd>{{ icon arrow_down 12 ik }}</kbd> volume · <kbd>&lt;</kbd> <kbd>&gt;</kbd> vitesse · <kbd>,</kbd> <kbd>.</kbd> image par image (en pause) · molette sur le volume · <kbd>M</kbd> muet · <kbd>C</kbd> sous-titres · <kbd>T</kbd> mode cinéma · <kbd>I</kbd> image dans l'image · <kbd>F</kbd> plein écran · <kbd>V</kbd> verrouiller les commandes · écran tactile : glisser de haut en bas pour le volume, de gauche à droite pour avancer ou reculer</p>
   </section>
   </div>
   <aside class='next'><h2>Dans ce dossier <span class='cnt' id='list-pos'>{{ pos }}</span></h2><div class='list'>{{ rows }}</div></aside>
