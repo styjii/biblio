@@ -11,9 +11,9 @@ class LecteurVideoTests(unittest.TestCase):
         for gone in ("wbar", "wctrls", "id='autonext'", "id='w-", "class='switch'"):
             self.assertNotIn(gone, html)
         self.assertNotIn("raw?dl=1", html)                        # le téléchargement est dans le menu des paramètres
-        for act in ("prev", "back", "fwd", "next", "settings"):
+        for act in ("prev", "back", "fwd", "next", "cc", "settings"):
             self.assertIn(f"data-act='{act}'", html)
-        for act in ("shuffle", "repeat", "cc", "rate"):               # ces commandes sont dans le menu des paramètres, pas dans la barre
+        for act in ("shuffle", "repeat", "rate"):                     # ces commandes sont dans le menu des paramètres, pas dans la barre
             self.assertNotIn(f"data-act='{act}'", html)
 
     def test_script_sans_reference_aux_anciens_boutons(self):

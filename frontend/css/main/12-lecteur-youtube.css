@@ -223,6 +223,7 @@
 @container vp (max-width:420px){                  /* téléphone en portrait : le bouton du mode cinéma est toujours là, les boutons se resserrent pour tenir sur la barre */
   .vp-b{width:34px; height:34px}
   .vp-b svg{width:20px; height:20px}
+  .vp-r .vp-b{width:32px}                          /* groupe de droite (sous-titres, paramètres, cinéma, image dans l'image, plein écran) : un peu plus serré pour tenir à côté du volume */
 }
 /* mode cinéma en plein écran : l'image remplit l'écran (classe posée par le script seulement si cela ne rogne qu'une petite partie de l'image) */
 .player.fill video{object-fit:cover}

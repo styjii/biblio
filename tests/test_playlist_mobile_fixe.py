@@ -42,6 +42,15 @@ class DockMobileFixeTests(unittest.TestCase):
         desktop = media_block(self.css, "min-width:1000px")
         self.assertNotIn("dock", desktop)
 
+    def test_barre_de_defilement_masquee_seulement_en_mode_fixe(self):
+        """La barre de la page (celle de la playlist) ne s'affiche pas par-dessus le lecteur fixe ; ailleurs, elle reste."""
+        block = media_block(self.css, FIXED)
+        self.assertIn("html:has(#watch){scrollbar-width:none}", block)
+        self.assertIn("html:has(#watch)::-webkit-scrollbar{display:none}", block)
+        outside = self.css.replace(block, "")
+        self.assertNotIn("scrollbar-width:none}\n  html:has(#watch)", outside)
+        self.assertNotIn("html:has(#watch)", outside)
+
     def test_clignotement_seulement_en_mode_fixe(self):
         outside = self.css.replace(media_block(self.css, FIXED), "")
         self.assertNotIn(".row.flash", outside)

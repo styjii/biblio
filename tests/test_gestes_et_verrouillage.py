@@ -1,4 +1,5 @@
 """Lecteur vidéo : glissements au doigt (volume, position) et verrouillage des commandes."""
+import re
 import unittest
 
 from app import assets, config
@@ -114,11 +115,11 @@ class MenuSansDoublonsTests(unittest.TestCase):
 
     def test_barre_sans_les_commandes_du_menu(self):
         bar = WATCH_HTML.split("<div class='vp-bar'>")[1].split("<div class='vp-menu'")[0]
-        for ident in ("vp-shuffle", "vp-repeat", "vp-cc", "vp-rate"):
+        for ident in ("vp-shuffle", "vp-repeat", "vp-rate"):
             self.assertNotIn(ident, WATCH_HTML)
-        for act in ("shuffle", "repeat", "cc", "rate"):
+        for act in ("shuffle", "repeat", "rate"):
             self.assertNotIn(f"data-act='{act}'", bar)
-        for act in ("prev", "back", "play", "fwd", "next", "mute", "settings", "theater", "pip", "fs"):
+        for act in ("prev", "back", "play", "fwd", "next", "mute", "cc", "settings", "theater", "pip", "fs"):
             self.assertIn(f"data-act='{act}'", bar)
 
     def test_commandes_du_menu_toujours_accessibles(self):
@@ -128,10 +129,32 @@ class MenuSansDoublonsTests(unittest.TestCase):
             self.assertIn(key, self.js)                                    # les raccourcis clavier restent actifs
 
     def test_plus_de_code_mort_pour_les_boutons_retires(self):
-        for token in ("$('vp-shuffle')", "$('vp-repeat')", "$('vp-cc')", "$('vp-rate')"):
+        for token in ("$('vp-shuffle')", "$('vp-repeat')", "$('vp-rate')"):
             self.assertNotIn(token, self.js)
         for token in (".vp-mode", ".vp-rate"):
             self.assertNotIn(token, self.css)
+
+
+class BoutonSousTitresTests(unittest.TestCase):
+    """Bouton « sous-titres » de la barre : à gauche du bouton des paramètres, caché sans piste, enfoncé quand une piste est affichée."""
+    js = assets.WATCH_JS
+    css = assets.CSS
+
+    def test_a_gauche_des_parametres_dans_le_groupe_de_droite(self):
+        right = WATCH_HTML.split("<div class='vp-r'>")[1].split("</div>")[0]
+        self.assertLess(right.index("data-act='cc'"), right.index("data-act='settings'"))
+        button = re.search(r"<button[^>]*data-act='cc'[^>]*>", right).group(0)
+        self.assertIn("aria-pressed='false'", button)
+        self.assertIn(" hidden", button)                                   # caché tant que la vidéo n'a aucune piste
+
+    def test_le_clic_active_ou_desactive_les_sous_titres(self):
+        self.assertIn("cc: () => this.toggleCaptions(),", self.js)         # même action que la touche C
+        self.assertIn("this.#syncCaptionsButton();", self.js)              # état remis à jour à chaque changement de piste et de vidéo
+        self.assertIn("button.hidden = !this.#tracks.length;", self.js)
+        self.assertIn("aria-pressed", self.js.split("#syncCaptionsButton() {")[1].split("\n  }")[0])
+
+    def test_meme_repere_que_les_autres_reglages_actifs(self):
+        self.assertIn(".vp-row .vp-b[aria-pressed='true']:not([data-act='mute'])", self.css)
 
 
 class ZoneFixeMobileTests(unittest.TestCase):

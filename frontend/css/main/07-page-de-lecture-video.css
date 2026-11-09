@@ -78,6 +78,10 @@ a.chip:hover,a.btn:hover{background:var(--accent-soft); border-color:var(--accen
   .next h2{position:sticky; top:calc(var(--tb) + var(--dock-h,0px)); z-index:9; margin:0 -16px 12px; padding:11px 16px 10px; background:var(--bg); border-bottom:1px solid var(--border); touch-action:pinch-zoom}
   /* mode cinéma sur écran étroit : le lecteur prend la forme de la vidéo (--vp-ar, posée par le script), sans dépasser la hauteur utile de l'écran */
   .watch.theater .dock .player{aspect-ratio:var(--vp-ar,16/9); max-height:calc(100vh - var(--tb) - 190px); max-height:calc(100dvh - var(--tb) - 190px)}
+  /* la playlist défile avec la page : sa barre de défilement (celle de la page) ne doit pas se dessiner par-dessus le lecteur fixe. Elle est masquée sur cette page,
+     dans ce seul mode ; la liste défile toujours normalement au doigt, et PC / paysage bas / autres pages gardent leur barre. */
+  html:has(#watch){scrollbar-width:none}
+  html:has(#watch)::-webkit-scrollbar{display:none}
   .row.flash{animation:rowflash 1.4s ease-out}
   @media(prefers-reduced-motion:reduce){.row.flash{animation:none}}
 }

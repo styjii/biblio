@@ -215,6 +215,7 @@ class PlayerUI {
         back: () => this.skip(-PlayerUI.SKIP),
         fwd: () => this.skip(PlayerUI.SKIP),
         mute: () => { this.#settings.toggleMute(); this.peekVolume(); },       // en très petit lecteur, le curseur s'ouvre un instant
+        cc: () => this.toggleCaptions(),
         settings: () => this.#toggleMenu(),
         theater: () => this.toggleTheater(),
         pip: () => this.togglePip(),
@@ -698,10 +699,19 @@ class PlayerUI {
     this.#tracks.forEach((track, i) => { track.mode = i === index ? 'hidden' : 'disabled'; });
     this.#active = this.#tracks[index] ?? null;
     this.#renderCue();
+    this.#syncCaptionsButton();
     if (!byUser) return;
     if (!this.#menu.hidden) this.#renderMenu(true);
     prefs.set('cc', this.#active?.label ?? '');
     say(this.#active ? `Sous-titres : ${this.#active.label}` : 'Sous-titres désactivés');
+  }
+
+  /** Bouton « sous-titres » de la barre : caché si la vidéo n'a aucune piste, enfoncé tant qu'une piste est affichée. */
+  #syncCaptionsButton() {
+    const button = $('vp-cc');
+    if (!button) return;
+    button.hidden = !this.#tracks.length;
+    button.setAttribute('aria-pressed', String(Boolean(this.#active)));
   }
 
   #renderCue() {
