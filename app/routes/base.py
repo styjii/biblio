@@ -126,6 +126,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         authed = self.has_cookie()
         monitor.track(ip, self.headers.get("User-Agent", ""), authed, hit=not req.path.startswith(("/dashboard/", "/progress")))
         self._entry = None
+        config.library.select(self.root_cookie())       # dossier d'entrée de ce navigateur (avant tout calcul de chemin)
         if not req.path.startswith("/dashboard"):
             if req.path.startswith("/s/"):     # les aperçus web s'authentifient par le jeton dans l'URL
                 parts = req.path.split("/", 3)
@@ -133,8 +134,18 @@ class BaseHandler(BaseHTTPRequestHandler):
             if authed:
                 action = ActivityHistory.classify(req.path, parse_qs(req.query))
                 if action:
-                    self._entry = monitor.history.record(ip, *action)
+                    self._entry = monitor.history.record(ip, *action, root=config.library.root_id)
         return True
+
+    def root_cookie(self):
+        """Identifiant du dossier d'entrée choisi sur la page d'accueil (vide : celui par défaut)."""
+        c = SimpleCookie()
+        try:
+            c.load(self.headers.get("Cookie", ""))
+        except Exception:
+            return ""
+        m = c.get(config.ROOT_COOKIE)
+        return m.value if m else ""
 
     def has_cookie(self):
         c = SimpleCookie()

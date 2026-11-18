@@ -58,6 +58,8 @@ MD_CSS = asset("css/markdown.css")
 MD_JS = asset("js/markdown", wrap=True)
 DASH_CSS = asset("css/dashboard.css")
 DASH_JS = asset("js/dashboard", wrap=True)
+HOME_CSS = asset("css/home.css")
+HOME_JS = asset("js/home", wrap=True)
 LISTEN_CSS = asset("css/listen.css")
 LISTEN_JS = asset("js/listen", wrap=True)
 

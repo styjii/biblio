@@ -24,7 +24,7 @@ class Dashboard {
   #render(data) {
     $('host').textContent = data.host;
     this.#system.memory(data.memory);
-    this.#system.disks(data.disks ?? []);
+    this.#system.storage(data.storage);
     $('n-active').textContent = data.active;
     $('dev-sub').textContent = `${data.active} ${data.active > 1 ? 'appareils connectés' : 'appareil connecté'} (activité depuis moins de ${Math.round(data.window / 60)} min) · ${data.blocked}${data.blocked > 1 ? ' bloqués' : ' bloqué'}`;
     this.#devices.render(data.devices);

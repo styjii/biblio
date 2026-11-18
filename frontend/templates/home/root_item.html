@@ -1,0 +1,10 @@
+{# Dossier d'entrée disponible ; `tags` : pastilles (« Dossier courant », « Actif »). #}
+<a class='item root{{ cls }}' href='/open?root={{ id }}' title='{{ path }}'>
+  <span class='ico folder'>{{ icon drive 22 }}</span>
+  <span class='text'>
+    <span class='name'>{{ name }}</span>
+    <div class='sub'>{{ path }}</div>
+    <div class='rtags'>{{ tags }}</div>
+  </span>
+  <span class='go'>{{ icon chevron 18 }}</span>
+</a>

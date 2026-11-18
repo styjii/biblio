@@ -18,7 +18,7 @@ class ConfigTests(unittest.TestCase):
         (t / "lib" / "sub").mkdir(parents=True)
         cls.env = t / "mon.env"
         cls.env.write_text("# commentaire\nexport BIBLIO_TOKEN='abc123'\nBIBLIO_PASSWORD=\"secret\"\n"
-                           "BIBLIO_MAX_UPLOAD_MB=1\nBIBLIO_DISKS=/a=Disque A;/b\n", encoding="utf-8")
+                           "BIBLIO_MAX_UPLOAD_MB=1\nBIBLIO_DISKS=/a=Disque A;/b=Disque B\n", encoding="utf-8")
         cls.env.chmod(0o600)
         config.load(t / "lib", 9999, True, str(cls.env))
 
@@ -32,7 +32,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.EnvFile.read(self.env)["BIBLIO_TOKEN"], "abc123")
         self.assertEqual((config.TOKEN, config.PASSWORD, config.DASH_PASSWORD), ("abc123", "secret", "secret"))
         self.assertEqual((config.PORT, config.READONLY, config.MAX_UPLOAD), (9999, True, 1024 * 1024))
-        self.assertEqual(config.DISKS, [("/a", "Disque A"), ("/b", "/b")])
+        self.assertEqual(config.DISKS, [("/a", "Disque A"), ("/b", "Disque B")])
         self.assertEqual(config.ENV_PATH, self.env.resolve())
         self.assertEqual(config.env.permissions_warning(), "")
 

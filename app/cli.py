@@ -1,6 +1,7 @@
 """Ligne de commande : lecture des options, configuration, démarrage du serveur HTTP."""
 
 import argparse
+import os
 import signal
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -23,8 +24,8 @@ class Application:
     @staticmethod
     def build_parser():
         parser = argparse.ArgumentParser(description="Bibliothèque : documents, vidéos, texte et code")
-        parser.add_argument("dossier", nargs="?", default=str(config.ROOT),
-                            help="dossier à servir (défaut : dossier courant)")
+        parser.add_argument("dossier", nargs="?", default=os.environ.get("BIBLIO_DOCS") or None,
+                            help="dossier courant à proposer sur la page d'accueil, en plus des chemins BIBLIO_DISKS du .env")
         parser.add_argument("-p", "--port", type=int, default=config.PORT)
         parser.add_argument("-r", "--readonly", action="store_true", help="désactive l'édition")
         parser.add_argument("-e", "--env", help="fichier .env : BIBLIO_TOKEN, BIBLIO_PASSWORD (défaut : .env à côté de server.py)")
@@ -34,15 +35,23 @@ class Application:
     def configure(self):
         parser = self.build_parser()
         self.args = parser.parse_args()
-        root = Path(self.args.dossier).expanduser().resolve()
-        if not root.is_dir():
-            parser.error(f"dossier introuvable : {root}")
-        config.load(root, self.args.port, self.args.readonly, self.args.env, self.args.pdfjs)
+        root = None
+        if self.args.dossier:
+            root = Path(self.args.dossier).expanduser().resolve()
+            if not root.is_dir():
+                parser.error(f"dossier introuvable : {root}")
+        try:
+            config.load(root, self.args.port, self.args.readonly, self.args.env, self.args.pdfjs)
+        except config.ConfigError as e:
+            parser.error(str(e))
 
     # --- messages de démarrage ---
     @staticmethod
     def print_status():
-        print(f"Bibliothèque : {config.ROOT}" + ("  (lecture seule)" if config.READONLY else ""))
+        print("Bibliothèque" + (" (lecture seule)" if config.READONLY else "") + " : dossiers d'entrée proposés sur la page d'accueil")
+        for m in config.library.mounts:
+            flags = (" [dossier courant]" if m.launch else "") + ("" if m.available else " [introuvable]")
+            print(f"  - {m.name} : {m.path}{flags}")
         print(f"Configuration : {config.ENV_PATH}")
         if config.READONLY:
             pass

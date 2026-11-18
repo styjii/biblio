@@ -74,7 +74,7 @@ class ServerTests(unittest.TestCase):
         self.assertNotIn("notes.txt", body)
 
     def test_pages_principales(self):
-        for path, marker in [("/", "notes.txt"), ("/view?f=notes.txt", "edbar"), ("/preview?f=lisez.md", "md-art"),
+        for path, marker in [("/browse", "notes.txt"), ("/", "Dossier courant"), ("/view?f=notes.txt", "edbar"), ("/preview?f=lisez.md", "md-art"),
                              ("/preview?f=page.html", "id='pv'"), ("/dashboard", "msgcard")]:
             with self.subTest(path=path):
                 status, body = self.get(path)
@@ -133,7 +133,7 @@ class ServerTests(unittest.TestCase):
         return r.status, r, r.read()
 
     def test_bouton_et_menu_des_dossiers(self):
-        status, body = self.get("/")
+        status, body = self.get("/browse")
         self.assertIn("id='newdir'", body)
         self.assertIn("Créer un dossier", body)
 
@@ -154,7 +154,7 @@ class ServerTests(unittest.TestCase):
                 self.assertEqual(self.fetch("POST", f"/mkdir?d=&to={bad}", b"", XHR, ck)[0], 400)
         self.assertEqual(self.fetch("POST", "/mkdir?d=..&to=evasion", b"", XHR, ck)[0], 403)
         # le dossier apparaît dans la liste, avec son menu
-        status, page = self.get("/")
+        status, page = self.get("/browse")
         self.assertIn("data-kind='folder'", page)
         # sous-dossier + fichiers, puis archive ZIP (téléchargement : aucun déverrouillage nécessaire)
         self.assertEqual(self.fetch("POST", "/mkdir?d=Cours%20%C3%A9t%C3%A9&to=vide", b"", XHR, ck)[0], 200)

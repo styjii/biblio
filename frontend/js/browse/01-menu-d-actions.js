@@ -51,7 +51,7 @@ class ItemMenu {
     listen:   {ic: 'music',    t: 'Écouter',            d: 'Lecteur audio (aléatoire, répétition…)', u: (f) => `/listen?f=${f}`},
     open:     {ic: 'external', t: 'Ouvrir',             d: 'Afficher dans le navigateur',          u: (f) => `/raw?f=${f}`},
     download: {ic: 'download', t: 'Télécharger',        d: 'Enregistrer une copie',                u: (f) => `/raw?dl=1&f=${f}`},
-    openf:    {ic: 'folder',   t: 'Ouvrir',             d: 'Afficher le contenu du dossier',       u: (f) => `/?folder=${f}`},
+    openf:    {ic: 'folder',   t: 'Ouvrir',             d: 'Afficher le contenu du dossier',       u: (f) => `/browse?folder=${f}`},
     zip:      {ic: 'download', t: 'Télécharger en ZIP', d: 'Archive du dossier et de son contenu', u: (f) => `/zip?f=${f}`},
     rename:   {ic: 'rename',   t: 'Renommer',           d: 'Changer le nom du fichier',            u: null, protected: true, attr: 'data-ren'},
     del:      {ic: 'trash',    t: 'Supprimer',          d: 'Supprimer définitivement',             u: null, protected: true, danger: true, attr: 'data-del'},

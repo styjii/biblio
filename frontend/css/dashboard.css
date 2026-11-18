@@ -7,10 +7,14 @@
 .stat .value{margin-top:4px; font-size:24px; font-weight:700; letter-spacing:-.01em}
 .stat .meter{margin-top:10px}
 .stat.wide{grid-column:1/-1}
-.meter{height:10px; margin-top:14px; border-radius:99px; background:var(--bg-2); overflow:hidden}
+.meter{position:relative; height:10px; margin-top:14px; border-radius:99px; background:var(--bg-2); overflow:hidden}
 .meter span{display:block; height:100%; width:0; border-radius:99px; background:var(--green); transition:width .4s,background .3s}
 .meter span.warn{background:var(--orange)}
 .meter span.crit{background:var(--red)}
+/* part du dossier courant : posée sur la partie utilisée de la barre (elle en fait partie, elle ne s'y ajoute pas) */
+.meter span.part{position:absolute; left:0; top:0; background:var(--accent); opacity:.85}
+.folder-line{display:flex; align-items:center; gap:6px; overflow-wrap:anywhere}
+.folder-line .sw{background:var(--accent); flex-shrink:0; margin-right:0}
 .dev{display:flex; flex-wrap:wrap; align-items:center; gap:14px; padding:12px 14px; border-radius:14px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow)}
 .dev.blocked{border-color:var(--red); background:var(--red-soft)}
 .dev .text{flex:1; min-width:160px; overflow-wrap:anywhere}

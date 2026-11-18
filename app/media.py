@@ -35,7 +35,7 @@ class MediaLibrary:
     @staticmethod
     def key(p):
         """Clé stable d'un média (dossier servi + chemin), utilisée côté navigateur pour mémoriser la lecture."""
-        return escape(f"{config.ROOT_ID}:{rel_of(p)}", quote=True)
+        return escape(f"{config.library.root_id}:{rel_of(p)}", quote=True)
 
     @staticmethod
     def _signature(path):

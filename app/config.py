@@ -21,6 +21,7 @@ import secrets
 import shutil
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.utils import atomic_write
@@ -39,8 +40,8 @@ PLAYBACK_PATH = CONFIG_DIR / "playback.json"           # dernière position de l
 # =====================================================================================================
 # Renseignés au démarrage par load()
 # =====================================================================================================
-# Dossier servi : celui passé en argument, sinon le dossier courant.
-ROOT = Path(os.environ.get("BIBLIO_DOCS", Path.cwd())).resolve()
+# Dossier d'entrée par défaut (voir `library`, plus bas : le dossier réellement servi dépend du navigateur).
+ROOT = Path.cwd().resolve()
 ROOT_ID = ""
 PORT = int(os.environ.get("BIBLIO_PORT", "8088"))
 READONLY = False
@@ -49,7 +50,7 @@ PASSWORD = ""        # BIBLIO_PASSWORD (.env) : vide = suppression, renommage et
 DASH_PASSWORD = ""   # BIBLIO_DASHBOARD_PASSWORD (.env), à défaut BIBLIO_PASSWORD : vide = tableau de bord désactivé
 ENV_PATH = None      # fichier .env (jeton, mot de passe)
 PDFJS_DIR = None     # dossier contenant legacy/web/viewer.html (pdf.js), s'il est trouvé
-DISKS = [("/mnt/ext0", "Disque externe"), ("/sdcard", "Stockage interne")]   # BIBLIO_DISKS=chemin=Nom;chemin=Nom
+DISKS = []           # BIBLIO_DISKS=chemin=Nom;chemin=Nom (au moins un chemin, ou un dossier passé en argument)
 
 # =====================================================================================================
 # Limites
@@ -67,6 +68,7 @@ LOCK_SECONDS = 60
 TICKET_TTL = 15 * 60   # durée de validité d'un jeton d'envoi (fenêtre glissante)
 AUTH_COOKIE = "fl_auth"        # cookie d'accès (contient le jeton)
 UNLOCK_COOKIE = "fl_unlock"    # cookie de session déverrouillée
+ROOT_COOKIE = "fl_root"        # cookie du dossier d'entrée choisi sur la page d'accueil (identifiant d'un `Mount`)
 
 # =====================================================================================================
 # Outils externes
@@ -166,17 +168,122 @@ def _load_token():
 
 
 # =====================================================================================================
-# Chargement de la configuration au démarrage
+# Dossiers d'entrée : dossier courant (s'il est précisé) et chemins du .env
 # =====================================================================================================
+class ConfigError(ValueError):
+    """Configuration invalide ou incomplète : le message est destiné à l'utilisateur."""
+
+
 def parse_disks(text):
-    """« /mnt/a=Disque A;/mnt/b=Disque B » -> [(chemin, nom), …]."""
+    """« /mnt/a=Disque A;/mnt/b=Disque B » -> [(chemin, nom), …]. Chaque chemin doit avoir un nom explicite."""
     disks = []
-    for item in text.split(";"):
-        path, _, label = item.partition("=")
-        path = path.strip()
-        if path:
-            disks.append((path, label.strip() or path))
+    for item in (text or "").split(";"):
+        if not item.strip():
+            continue
+        path, sep, label = item.partition("=")
+        path, label = path.strip(), label.strip()
+        if not path or not sep or not label:
+            raise ConfigError(f"BIBLIO_DISKS : « {item.strip()} » doit s'écrire chemin=Nom (par exemple /mnt/ext0=Disque externe).")
+        disks.append((path, label))
     return disks
+
+
+@dataclass(frozen=True)
+class Mount:
+    """Un dossier d'entrée de la bibliothèque : un chemin du .env, ou le dossier passé au lancement."""
+    id: str            # identifiant stable (hachage du chemin) : cookie, clés de reprise de lecture
+    name: str          # nom explicite affiché (« Disque externe »)
+    path: Path         # chemin résolu
+    shown: str         # chemin tel qu'il a été écrit dans le .env (affichage)
+    launch: bool = False   # vrai pour le dossier courant (précisé au lancement)
+    configured: bool = True    # faux pour le dossier courant qui ne figure pas dans BIBLIO_DISKS
+
+    @property
+    def available(self):
+        return self.path.is_dir()
+
+
+class Library:
+    """Dossiers d'entrée disponibles et celui qui est actif pour la requête en cours (un par navigateur, via cookie).
+
+    La sélection est propre à chaque fil d'exécution : chaque requête HTTP appelle `select()` en arrivant, puis tout le
+    code qui parle de « la racine » lit `library.root` / `library.root_id`."""
+
+    def __init__(self):
+        self.mounts = []
+        here = Path.cwd()
+        self._default = Mount("", "Dossier courant", here, str(here))     # remplacé par build() au démarrage
+        self._local = threading.local()
+
+    @staticmethod
+    def mount_id(path):
+        return hashlib.sha1(str(path).encode()).hexdigest()[:8]
+
+    def build(self, launch, disks):
+        """Construit la liste : dossier courant (si précisé) puis chemins du .env. Plus d'un chemin identique ou nom en double : erreur."""
+        mounts, seen_paths, seen_names = [], {}, {}
+        launch_path = Path(launch).expanduser().resolve() if launch else None
+        for raw, name in disks:
+            path = Path(raw).expanduser().resolve()
+            if path in seen_paths:
+                raise ConfigError(f"BIBLIO_DISKS : « {raw} » et « {seen_paths[path]} » désignent le même dossier.")
+            if name.casefold() in seen_names:
+                raise ConfigError(f"BIBLIO_DISKS : le nom « {name} » est utilisé deux fois.")
+            seen_paths[path], seen_names[name.casefold()] = raw, name
+            mounts.append(Mount(self.mount_id(path), name, path, raw, launch=path == launch_path))
+        if launch_path is not None and not any(m.launch for m in mounts):
+            mounts.insert(0, Mount(self.mount_id(launch_path), "Dossier courant", launch_path, str(launch_path),
+                                  launch=True, configured=False))
+        if not mounts:
+            raise ConfigError("Aucun dossier configuré : définis BIBLIO_DISKS dans le .env (chemin=Nom;chemin=Nom) "
+                              "ou passe un dossier en argument.")
+        self.mounts = mounts
+        self._default = next((m for m in mounts if m.launch), mounts[0])
+
+    @property
+    def default(self):
+        return self._default
+
+    @property
+    def launch(self):
+        """Le dossier courant, s'il a été précisé au lancement (sinon None)."""
+        return next((m for m in self.mounts if m.launch), None)
+
+    def get(self, mount_id):
+        return next((m for m in self.mounts if m.id == mount_id), None)
+
+    def select(self, mount_id):
+        """Active un dossier d'entrée pour le fil d'exécution courant (identifiant inconnu : celui par défaut)."""
+        self._local.mount = self.get(mount_id) or self._default
+
+    @property
+    def current(self):
+        return getattr(self._local, "mount", None) or self._default
+
+    @property
+    def root(self):
+        return self.current.path
+
+    @property
+    def root_id(self):
+        return self.current.id
+
+    def containing(self, path):
+        """Dossier d'entrée le plus précis qui contient `path` (liens résolus), ou None."""
+        target = os.path.realpath(path)
+        best = None
+        for m in self.mounts:
+            base = os.path.realpath(m.path)
+            try:
+                inside = os.path.commonpath([target, base]) == base
+            except ValueError:
+                inside = False
+            if inside and (best is None or len(str(m.path)) > len(str(best.path))):
+                best = m
+        return best
+
+
+library = Library()
 
 
 def find_pdfjs(cli=None):
@@ -193,23 +300,22 @@ def find_pdfjs(cli=None):
 
 
 def load(root, port, readonly=False, env_file=None, pdfjs=None):
-    """Renseigne toute la configuration : dossier servi, port, .env, mots de passe, jeton, limites, pdf.js."""
+    """Renseigne toute la configuration : dossier courant (ou None), port, .env, chemins, mots de passe, jeton, limites, pdf.js."""
     global ROOT, ROOT_ID, PORT, READONLY, TOKEN, PASSWORD, DASH_PASSWORD, ENV_PATH, PDFJS_DIR, DISKS, MAX_UPLOAD
-    ROOT = Path(root).expanduser().resolve()
     PORT = port
     READONLY = bool(readonly)
     ENV_PATH = Path(env_file or os.environ.get("BIBLIO_ENV") or HERE / ".env").expanduser().resolve()
     env.load(ENV_PATH)
     PASSWORD = env.get("BIBLIO_PASSWORD")
     DASH_PASSWORD = env.get("BIBLIO_DASHBOARD_PASSWORD") or PASSWORD
-    if env.get("BIBLIO_DISKS"):
-        DISKS = parse_disks(env.get("BIBLIO_DISKS"))
+    DISKS = parse_disks(env.get("BIBLIO_DISKS"))
+    library.build(root, DISKS)
+    ROOT, ROOT_ID = library.default.path, library.default.id
     TOKEN = _load_token()
     try:
         MAX_UPLOAD = max(0, int(env.get("BIBLIO_MAX_UPLOAD_MB") or 4096)) * 1024 * 1024
     except ValueError:
         print("Attention : BIBLIO_MAX_UPLOAD_MB invalide, valeur par défaut (4096 Mo) utilisée.")
-    ROOT_ID = hashlib.sha1(str(ROOT).encode()).hexdigest()[:8]
     PDFJS_DIR = find_pdfjs(pdfjs)
 
 
@@ -344,15 +450,16 @@ class PathGuard:
         """Vrai si p désigne l'emplacement du .env (comparaison sur le nom, même si le fichier n'existe pas)."""
         return ENV_PATH is not None and os.path.normcase(str(p)) == os.path.normcase(str(ENV_PATH))
 
-    def resolve(self, rel):
-        """Chemin *logique* sous ROOT : les liens symboliques ne sont pas résolus, de sorte
+    def resolve(self, rel, mount=None):
+        """Chemin *logique* sous la racine du dossier d'entrée actif (ou de `mount`) : les liens symboliques ne sont pas résolus, de sorte
         qu'un raccourci vers un dossier se comporte comme un vrai dossier (même hors de ROOT).
         Seuls les « .. » et les chemins absolus sont neutralisés, de façon purement lexicale. None si interdit."""
         if "\x00" in rel:
             return None
-        p = Path(os.path.normpath(ROOT / rel))
+        root = (mount or library.current).path
+        p = Path(os.path.normpath(root / rel))
         try:
-            p.relative_to(ROOT)
+            p.relative_to(root)
         except ValueError:
             return None
         if self.is_env_file(p):

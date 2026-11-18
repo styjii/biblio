@@ -9,7 +9,7 @@ from app.utils import natural_key
 
 
 def rel_of(p):
-    return p.relative_to(config.ROOT).as_posix()
+    return p.relative_to(config.library.root).as_posix()
 
 
 def kind_of(p):

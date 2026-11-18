@@ -185,7 +185,7 @@ class DeviceTracker:
 
 
 class ActivityHistory:
-    """Actions de chaque appareil : [début, fin, catégorie, fichier, octets, requêtes], enregistrées sur disque."""
+    """Actions de chaque appareil : [début, fin, catégorie, fichier, octets, requêtes, dossier d'entrée], enregistrées sur disque."""
     CATEGORIES = [   # (identifiant, libellé, couleur)
         ("video", "Vidéos", "var(--pink)"),
         ("audio", "Audio", "var(--teal)"),
@@ -220,8 +220,8 @@ class ActivityHistory:
         def arg(name):
             return q.get(name, [""])[0]
 
-        if path == "/":
-            return None if arg("token") else ("browse", arg("folder") or "/")
+        if path == "/browse":
+            return "browse", arg("folder") or "/"
         if path == "/view":
             return "text", arg("f")
         if path == "/edit":
@@ -257,9 +257,10 @@ class ActivityHistory:
         return None
 
     # --- enregistrement ---
-    def record(self, ip, cat, file):
-        """Ajoute une action ; les requêtes rapprochées sur un même fichier (flux vidéo découpé en plages,
-        par exemple) sont fusionnées en une seule action. -> entrée modifiable (voir add_bytes)."""
+    def record(self, ip, cat, file, root=""):
+        """Ajoute une action (`root` : identifiant du dossier d'entrée dans lequel `file` est relatif) ; les requêtes
+        rapprochées sur un même fichier (flux vidéo découpé en plages, par exemple) sont fusionnées en une seule action.
+        -> entrée modifiable (voir add_bytes)."""
         now = time.time()
         gap = self.GAP.get(cat, self.DEFAULT_GAP)
         file = file[:300]
@@ -271,11 +272,11 @@ class ActivityHistory:
             for i, e in enumerate(reversed(h)):
                 if i >= 8:
                     break
-                if e[2] == cat and e[3] == file and now - e[1] <= gap:
+                if e[2] == cat and e[3] == file and e[6] == root and now - e[1] <= gap:
                     e[1] = now
                     e[5] += 1
                     return e
-            e = [now, now, cat, file, 0, 1]
+            e = [now, now, cat, file, 0, 1, root]
             h.append(e)
             return e
 
@@ -322,7 +323,8 @@ class ActivityHistory:
                 for e in items if isinstance(items, list) else []:
                     try:
                         if e[2] in cats:
-                            h.append([float(e[0]), float(e[1]), e[2], str(e[3])[:300], int(e[4]), int(e[5])])
+                            root = str(e[6])[:16] if len(e) > 6 else ""     # absent des anciens historiques
+                            h.append([float(e[0]), float(e[1]), e[2], str(e[3])[:300], int(e[4]), int(e[5]), root])
                     except (IndexError, ValueError, TypeError):
                         continue
                 if h:
@@ -335,6 +337,24 @@ class ActivityHistory:
             if self.dirty:
                 self.save()
 
+    # --- fichiers fréquents ---
+    FREQUENT_CATS = ("video", "audio", "pdf", "text", "web", "image")
+
+    def frequent(self, ip, limit=5, legacy_root=""):
+        """Fichiers les plus consultés par un appareil sur la durée de conservation :
+        [{"cat", "file", "root", "n"}], du plus fréquent au plus récent à égalité. Les actions enregistrées avant que
+        le dossier d'entrée soit mémorisé (`root` vide) sont rattachées à `legacy_root`."""
+        cutoff = time.time() - self.DAYS * 86400
+        counts = {}
+        with self._lock:
+            entries = [tuple(e) for e in self._log.get(ip, ()) if e[1] >= cutoff and e[2] in self.FREQUENT_CATS and e[3]]
+        for _, end, cat, file, _, _, root in entries:
+            c = counts.setdefault((cat, file, root or legacy_root), [0, 0.0])
+            c[0] += 1
+            c[1] = max(c[1], end)
+        ranked = sorted(counts.items(), key=lambda kv: (-kv[1][0], -kv[1][1]))
+        return [{"cat": k[0], "file": k[1], "root": k[2], "n": v[0]} for k, v in ranked[:limit]]
+
     # --- rapport ---
     def report(self, ip, rng):
         """Courbes, totaux, fichiers les plus consultés et liste récente pour un appareil (ou « all »)."""
@@ -346,7 +366,7 @@ class ActivityHistory:
         totals = {c[0]: {"actions": 0, "bytes": 0, "seconds": 0.0} for c in self.CATEGORIES}
         with self._lock:
             sources = self._log.items() if ip == "all" else [(ip, self._log.get(ip, ()))]
-            rows = [(dev, tuple(e)) for dev, h in sources for e in h if e[1] >= start]
+            rows = [(dev, tuple(e[:6])) for dev, h in sources for e in h if e[1] >= start]
         top = {}
         for dev, (s, e, cat, file, nbytes, reqs) in rows:
             if cat not in series:

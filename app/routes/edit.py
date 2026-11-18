@@ -100,7 +100,7 @@ class EditRoutes(BaseHandler):
             return
 
         p = config.paths.resolve(q.get("f", [""])[0])
-        if p is None or p == config.ROOT:
+        if p is None or p == config.library.root:
             self.send_json({"ok": False, "error": "Chemin non autorisé"}, 403)
             return
         if not os.path.lexists(p):
@@ -132,7 +132,7 @@ class EditRoutes(BaseHandler):
             self.send_json({"ok": False, "error": "Accès verrouillé", "locked": True}, 403)
             return
         p = config.paths.resolve(q.get("f", [""])[0])
-        if p is None or p == config.ROOT:
+        if p is None or p == config.library.root:
             self.send_json({"ok": False, "error": "Chemin non autorisé"}, 403)
             return
         if not os.path.lexists(p):

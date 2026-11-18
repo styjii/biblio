@@ -29,6 +29,7 @@ de compilation du front-end.
 
 | Domaine | Ce que fait Biblio |
 |---|---|
+| Accueil | Choix du dossier d'entrée (dossier courant et disques du `.env`), 5 fichiers fréquents, lecteur multimédia local (glisser-déposer, sans envoi au serveur) |
 | Navigation | Dossiers et fichiers en cartes, fil d'Ariane, recherche dans le dossier, filtres par catégorie, tri (nom, date, taille, durée, type), miniatures des vidéos |
 | Texte et code | Lecture et édition avec CodeMirror, mode Vim, numéros de ligne, retour à la ligne, taille du texte réglable |
 | Markdown | Aperçu rendu dans le navigateur : sommaire, progression de lecture, réglages de lecture, copie du code, impression |
@@ -38,7 +39,7 @@ de compilation du front-end.
 | PDF | Visionneuse pdf.js (ou lecteur du navigateur si pdf.js est absent) |
 | Fichiers | Création de fichiers et de dossiers, renommage, suppression, envoi de fichiers et de dossiers, téléchargement d'un dossier en ZIP |
 | Accès | Jeton d'accès dans le lien, cadenas protégé par mot de passe pour les actions d'écriture, mode lecture seule |
-| Supervision | Tableau de bord : mémoire, disques, appareils connectés, historique d'activité, blocage par adresse IP |
+| Supervision | Tableau de bord : mémoire, espace libre de chaque disque, appareils connectés, historique d'activité, blocage par adresse IP |
 | Interface | Thème clair et sombre, adaptée au téléphone comme à l'ordinateur, textes en français |
 
 ## Prérequis
@@ -64,13 +65,20 @@ Le dépôt contient tout ce qu'il faut : l'éditeur de texte (`editor.bundle.js`
 ## Démarrage rapide
 
 ```bash
-python3 server.py /chemin/vers/mon/dossier
+# 1. dans le .env : au moins un dossier d'entrée, avec un nom explicite
+BIBLIO_DISKS=/mnt/ext0=Disque externe;/sdcard=Disque interne
+
+# 2. lancement (le dossier en argument est facultatif : il devient « Dossier courant » sur la page d'accueil)
+python3 server.py [/chemin/vers/mon/dossier]
 ```
 
 Au démarrage, Biblio affiche les adresses à ouvrir :
 
 ```
-Bibliothèque : /chemin/vers/mon/dossier
+Bibliothèque : dossiers d'entrée proposés sur la page d'accueil
+  - Dossier courant : /chemin/vers/mon/dossier [dossier courant]
+  - Disque externe : /mnt/ext0
+  - Disque interne : /sdcard
 Configuration : /chemin/vers/biblio/.env
 Local   : http://localhost:8088/?token=XXXXXXXXXXXXXXXX
 Réseau  : http://192.168.1.20:8088/?token=XXXXXXXXXXXXXXXX
@@ -88,7 +96,7 @@ python3 server.py [dossier] [-p PORT] [-r] [-e FICHIER_ENV] [-j DOSSIER_PDFJS]
 
 | Option | Rôle | Défaut |
 |---|---|---|
-| `dossier` | Dossier à servir | dossier courant (ou `BIBLIO_DOCS`) |
+| `dossier` | Dossier courant, proposé sur la page d'accueil en plus des chemins de `BIBLIO_DISKS` | aucun (ou `BIBLIO_DOCS`) |
 | `-p`, `--port` | Port d'écoute | `8088` (ou `BIBLIO_PORT`) |
 | `-r`, `--readonly` | Désactive toute écriture : édition, suppression, renommage, envoi | désactivé |
 | `-e`, `--env` | Fichier `.env` à utiliser (ou `BIBLIO_ENV`) | `.env` à côté de `server.py` |
@@ -98,7 +106,7 @@ python3 server.py [dossier] [-p PORT] [-r] [-e FICHIER_ENV] [-j DOSSIER_PDFJS]
 Exemples :
 
 ```bash
-python3 server.py                               # sert le dossier courant sur le port 8088
+python3 server.py                               # dossiers du .env (BIBLIO_DISKS), port 8088
 python3 server.py ~/Documents -p 9000           # autre dossier, autre port
 python3 server.py /mnt/ext0/films --readonly    # consultation seule
 python3 server.py ~/Documents -e /etc/biblio.env
@@ -137,8 +145,8 @@ fichier.
 | `BIBLIO_PASSWORD` | Mot de passe du cadenas : renommer, supprimer, envoyer des fichiers. Absent ou vide : ces actions sont désactivées | aucun |
 | `BIBLIO_MAX_UPLOAD_MB` | Taille maximale d'un fichier envoyé, en Mo (`0` = illimitée) | `4096` |
 | `BIBLIO_DASHBOARD_PASSWORD` | Mot de passe du tableau de bord. Absent : `BIBLIO_PASSWORD` est utilisé ; sans aucun des deux, le tableau de bord est désactivé | `BIBLIO_PASSWORD` |
-| `BIBLIO_DISKS` | Volumes affichés dans le tableau de bord, `chemin=Nom` séparés par des points-virgules | `/mnt/ext0=Disque externe;/sdcard=Stockage interne` |
-| `BIBLIO_DOCS` | Dossier servi quand aucun n'est passé en argument | dossier courant |
+| `BIBLIO_DISKS` | Dossiers d'entrée, `chemin=Nom` séparés par des points-virgules : autant que voulu, **au moins un** (ou un dossier passé en argument), chacun avec un nom explicite. Page d'accueil et tableau de bord | aucun |
+| `BIBLIO_DOCS` | Dossier courant quand aucun n'est passé en argument | aucun |
 | `BIBLIO_PORT` | Port d'écoute | `8088` |
 | `BIBLIO_ENV` | Chemin du fichier `.env` | `.env` du projet |
 | `BIBLIO_PDFJS` | Dossier contenant pdf.js | `legacy/` du projet |
@@ -186,7 +194,21 @@ Recommandations :
 
 ## Guide des fonctionnalités
 
-### Navigation
+### Page d'accueil (`/`)
+
+- **Dossier d'entrée** : une carte par chemin de `BIBLIO_DISKS` (nom explicite et chemin), plus le « Dossier courant »
+  s'il a été passé en argument. Un clic ouvre la liste des fichiers de ce dossier. Le choix est mémorisé par navigateur
+  (cookie) : chaque appareil a son propre dossier actif. Un chemin introuvable (disque non monté) est signalé et n'est
+  pas cliquable. Ouvrir deux disques dans deux onglets du même navigateur n'est pas possible : le dernier choisi l'emporte.
+- **Fichiers fréquents** : les 5 fichiers que **cet appareil** a le plus consultés (30 derniers jours, vidéo, audio,
+  PDF, texte, web, images). Un clic réactive le bon dossier d'entrée puis ouvre le fichier. Les fichiers supprimés
+  sont ignorés.
+- **Lecteur multimédia** : choisir ou glisser-déposer (n'importe où sur la page) des vidéos et des sons de l'appareil.
+  Le navigateur les lit directement depuis le disque (URL locale) : **rien n'est copié ni envoyé au serveur**.
+  Plusieurs fichiers forment une liste (précédent, suivant, enchaînement automatique, retrait). Un format ou un codec
+  que le navigateur ne sait pas lire est signalé.
+
+### Navigation (`/browse`)
 
 - **Cartes** par type de fichier (vidéo, audio, image, PDF, texte, code, web, archive…), avec miniatures pour les
   vidéos et aperçu animé au survol (souris) ou à l'appui maintenu (tactile).
@@ -341,7 +363,11 @@ Toutes ces actions exigent d'avoir déverrouillé l'accès avec le cadenas, et s
 Activé si `BIBLIO_DASHBOARD_PASSWORD` ou `BIBLIO_PASSWORD` est défini.
 
 - **Mémoire** : utilisée, libre, totale, avec jauge.
-- **Disques** : capacité et occupation des volumes de `BIBLIO_DISKS`.
+- **Stockage** : un bloc par chemin de `BIBLIO_DISKS`, avec l'**espace libre** en premier, puis l'utilisation du
+  volume. Sans double comptage : deux chemins sur le même volume sont signalés et l'espace libre total ne les compte
+  qu'une fois ; le dossier courant, déjà rattaché à l'un de ces chemins, n'est pas ajouté comme un volume de plus : sa
+  taille (calculée en arrière-plan, mise à jour toutes les 5 minutes) apparaît comme une part du disque qui le contient.
+  S'il est seul sur son volume, il a son propre bloc.
 - **Appareils connectés** : adresse IP, navigateur, dernier passage, nombre de requêtes.
 - **Historique d'activité** par appareil : navigation, lecture de texte, édition, vidéo, audio, PDF, web, images,
   téléchargements, avec courbes sur plusieurs durées.
@@ -363,7 +389,9 @@ tests/                    tests
 
 | Route | Rôle |
 |---|---|
-| `/` | Navigation (`?folder=…`) |
+| `/` | Page d'accueil (l'ancienne adresse `/?folder=…` est redirigée vers `/browse`) |
+| `/browse` | Navigation (`?folder=…`) |
+| `/open` | Choix du dossier d'entrée (`?root=<id>&to=<chemin local>`), puis redirection |
 | `/view`, `/edit` | Lecture et édition de texte |
 | `/preview` | Aperçu Markdown ou page web |
 | `/watch`, `/listen` | Lecteurs vidéo et audio |
@@ -382,10 +410,10 @@ tests/                    tests
 | Module | Rôle |
 |---|---|
 | `cli.py` | options de la ligne de commande, configuration, démarrage |
-| `config.py` | réglages (dossier servi, jeton, mots de passe, limites, chemins), sécurité (`PasswordGuard`, `TicketStore`, `SessionStore`, `PathGuard`) |
+| `config.py` | réglages (dossiers d'entrée : `Mount` et `Library`, jeton, mots de passe, limites, chemins), sécurité (`PasswordGuard`, `TicketStore`, `SessionStore`, `PathGuard`) |
 | `handler.py` | `FileHandler` : assemble les routes, répartit GET / POST |
-| `routes/` | une famille de routes par fichier : `browse`, `viewer`, `player`, `progress`, `serve`, `edit`, `upload`, `auth`, `dashboard` (+ `base` : envoi des réponses, cookies) |
-| `views/` | briques HTML : `layout` (page, barre du haut, messages), `cards` (cartes de fichiers), `dashboard` |
+| `routes/` | une famille de routes par fichier : `home`, `browse`, `viewer`, `player`, `progress`, `serve`, `edit`, `upload`, `auth`, `dashboard` (+ `base` : envoi des réponses, cookies) |
+| `views/` | briques HTML : `layout` (page, barre du haut, messages), `cards` (cartes de fichiers), `home`, `dashboard` |
 | `devices.py` | appareils connectés, blocage par IP, historique d'activité |
 | `playback.py` | dernière position de lecture de chaque appareil |
 | `media.py`, `sysinfo.py` | miniatures, durées, tags, sous-titres (ffmpeg) ; mémoire et disques |
@@ -395,8 +423,11 @@ tests/                    tests
 Les dépendances vont toujours dans le même sens (`config` → services → `views` → `routes` → `handler` → `cli`) :
 aucun import circulaire.
 
-**Règle importante** : les réglages renseignés au démarrage (`ROOT`, `TOKEN`, `PASSWORD`, `READONLY`…) se lisent avec
-`config.ROOT`, jamais avec `from app.config import ROOT` (la valeur serait figée au chargement du module).
+**Règle importante** : les réglages renseignés au démarrage (`TOKEN`, `PASSWORD`, `READONLY`…) se lisent avec
+`config.TOKEN`, jamais avec `from app.config import TOKEN` (la valeur serait figée au chargement du module). Le dossier
+servi se lit avec `config.library.root` (et `config.library.root_id`) : il dépend du navigateur, chaque requête active
+son dossier d'entrée au début de son traitement (`BaseHandler.parse_request`). Ne pas utiliser `config.ROOT`, qui n'est
+que la valeur par défaut.
 
 ### `frontend/` — HTML, CSS, JavaScript
 
@@ -468,6 +499,8 @@ gabarit n'est orphelin, que le comportement mobile du lecteur vidéo (zone fixe,
 | Lecture et édition de texte indisponibles | `editor.bundle.js` absent à côté de `server.py` |
 | « Trop d'essais » | Cinq mots de passe erronés : attendre 60 secondes |
 | Une modification du front-end n'apparaît pas | Relancer le serveur (les fichiers sont lus au démarrage) |
+| « Aucun dossier configuré » au démarrage | Définir `BIBLIO_DISKS=/chemin=Nom` dans le `.env` ou passer un dossier en argument |
+| `BIBLIO_DISKS : … doit s'écrire chemin=Nom` | Chaque chemin doit avoir un nom : `/mnt/ext0=Disque externe` |
 | Tableau de bord désactivé | Définir `BIBLIO_DASHBOARD_PASSWORD` ou `BIBLIO_PASSWORD` |
 | Avertissement sur les droits du `.env` | `chmod 600 .env` |
 

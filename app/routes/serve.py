@@ -62,7 +62,7 @@ class ServeRoutes(BaseHandler):
         if p is None or not p.is_dir():
             self.send_error(404, "Dossier introuvable")
             return
-        top = p.name or config.ROOT.name or "bibliotheque"
+        top = p.name or config.library.current.name or "bibliotheque"
         fname = top + ".zip"
         ascii_name = "".join(c if c.isascii() and c.isprintable() and c not in '"\\;' else "_" for c in fname)
         self.send_response(200)

@@ -152,7 +152,7 @@ class ViewerRoutes(BaseHandler):
         if err:
             self.send_html(unreadable_page(p, err, q, back), 200)
             return
-        rel_dir = "" if p.parent == config.ROOT else rel_of(p.parent)
+        rel_dir = "" if p.parent == config.library.root else rel_of(p.parent)
         folder_label = folder_label_of(p)
         exts = {name: sorted(e.lstrip(".") for e in group) for name, group in (
             ("md", MD_EXT), ("web", WEB_EXT), ("image", IMAGE_EXT), ("video", VIDEO_EXT),

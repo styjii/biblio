@@ -38,8 +38,8 @@ class PlayerRoutes(BaseHandler):
             size = fmt_size(p.stat().st_size)
         except OSError:
             size = ""
-        folder_rel = p.parent.relative_to(config.ROOT)
-        folder_name = folder_rel.name if folder_rel.parts else (config.ROOT.name or "Accueil")
+        folder_rel = p.parent.relative_to(config.library.root)
+        folder_name = folder_rel.name if folder_rel.parts else (config.library.current.name)
 
         tracks, sub_chips = "", ""
         for f, tag in media.find_subtitles(p):
@@ -59,7 +59,7 @@ class PlayerRoutes(BaseHandler):
                       folder_href=folder_url(p.parent), folder_name=escape(folder_name),
                       size=size, ext=p.suffix[1:].upper(),
                       sub_chips=sub_chips, pos=f"{idx + 1} / {len(siblings)}", rows="".join(video_row(v, p) for v in siblings))
-        cfg = {"key": f"{config.ROOT_ID}:{rel_of(p)}", "folder": f"{config.ROOT_ID}:{rel_of(p.parent)}",
+        cfg = {"key": f"{config.library.root_id}:{rel_of(p)}", "folder": f"{config.library.root_id}:{rel_of(p.parent)}",
                "index": idx, "download": f"/raw?dl=1&f={q}",
                "items": [{"f": rel_of(x), "u": watch_url(x)} for x in siblings]}
         wico = {n: icon(n, 24) for n in ("repeat", "repeat1", "volume", "mute", "play", "pause", "replay", "expand", "shrink",
@@ -81,12 +81,12 @@ class PlayerRoutes(BaseHandler):
         except ValueError:
             siblings.insert(0, p)
             start = 0
-        folder_rel = p.parent.relative_to(config.ROOT)
-        folder_name = folder_rel.name if folder_rel.parts else (config.ROOT.name or "Accueil")
+        folder_rel = p.parent.relative_to(config.library.root)
+        folder_name = folder_rel.name if folder_rel.parts else (config.library.current.name)
         tracks = [{"f": rel_of(f), "q": quote(rel_of(f), safe=""), "n": f.stem, "e": f.suffix[1:].upper()}
                   for f in siblings]
         cfg = {"tracks": tracks, "start": start, "folder": folder_name,
-               "back": folder_url(p.parent), "key": config.ROOT_ID}
+               "back": folder_url(p.parent), "key": config.library.root_id}
 
         lico = {n: icon(n, 24) for n in ("play", "pause", "repeat", "repeat1", "volume", "mute",
                                          "music", "loader", "eq")}

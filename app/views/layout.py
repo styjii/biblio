@@ -43,7 +43,7 @@ def topbar(with_search, lock=False):
 def folder_label_of(p):
     """Libellé du dossier d'un fichier, relatif au dossier servi (« / » ou son nom pour la racine)."""
     parent = p.parent
-    return parent.relative_to(config.ROOT).as_posix() if parent != config.ROOT else (config.ROOT.name or "/")
+    return parent.relative_to(config.library.root).as_posix() if parent != config.library.root else (config.library.current.name)
 
 
 def pill_link(href, icon_name, label, extra=""):
@@ -52,8 +52,8 @@ def pill_link(href, icon_name, label, extra=""):
 
 
 def folder_url(p_dir):
-    rel = p_dir.relative_to(config.ROOT)
-    return "/?folder=" + quote(rel.as_posix(), safe="") if rel.parts else "/"
+    rel = p_dir.relative_to(config.library.root)
+    return "/browse?folder=" + quote(rel.as_posix(), safe="") if rel.parts else "/browse"
 
 
 def lock_script(reload=None):

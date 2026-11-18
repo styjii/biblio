@@ -1,0 +1,9 @@
+{# Dossier d'entrée introuvable (disque non monté) : affiché, mais non cliquable. #}
+<div class='item root off' aria-disabled='true' title='{{ path }}'>
+  <span class='ico folder'>{{ icon drive 22 }}</span>
+  <span class='text'>
+    <span class='name'>{{ name }}</span>
+    <div class='sub'>{{ path }}</div>
+    <div class='rtags'><span class='rtag bad'>Introuvable (non monté ?)</span>{{ tags }}</div>
+  </span>
+</div>

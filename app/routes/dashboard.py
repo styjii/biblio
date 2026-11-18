@@ -27,7 +27,7 @@ class DashboardRoutes(BaseHandler):
             return
         rows = monitor.devices.rows(self.client_address[0])
         self.send_json({
-            "ok": True, "host": socket.gethostname(), "memory": SystemInfo.memory(), "disks": SystemInfo.disks(), "devices": rows,
+            "ok": True, "host": socket.gethostname(), "memory": SystemInfo.memory(), "storage": SystemInfo.storage(), "devices": rows,
             "active": sum(1 for r in rows if r["active"]), "blocked": sum(1 for r in rows if r["blocked"]),
             "window": DeviceTracker.ACTIVE_SECONDS,
         })

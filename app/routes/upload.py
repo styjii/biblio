@@ -77,7 +77,7 @@ class UploadRoutes(BaseHandler):
             return self.upload_error(length, "Dossier de destination introuvable", 404)
         final = Path(os.path.normpath(folder.joinpath(*parts)))
         try:
-            final.relative_to(config.ROOT)
+            final.relative_to(config.library.root)
         except ValueError:
             return self.upload_error(length, "Chemin non autorisé", 403)
         if config.paths.is_env_file(final):

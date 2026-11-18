@@ -1,0 +1,19 @@
+{# Page d'accueil : choix du dossier d'entrée, fichiers fréquents, lecteur multimédia local. #}
+<main class='home'>
+  <div class='home-head'>
+    <h1 class='home-title'>Accueil</h1>
+    <div class='sub'>Choisis un dossier d'entrée, rouvre un fichier récent ou lis un média de cet appareil.</div>
+  </div>
+  <section class='section'>
+    <h2>Dossier d'entrée <span class='count'>{{ roots_count }}</span></h2>
+    <div class='grid'>{{ roots }}</div>
+  </section>
+  <section class='section'>
+    <h2>Fichiers fréquents <span class='count'>{{ frequent_count }}</span></h2>
+    {{ frequent }}
+  </section>
+  <section class='section'>
+    <h2>Lecteur multimédia</h2>
+    {{ player }}
+  </section>
+</main>

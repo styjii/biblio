@@ -31,8 +31,8 @@ class BrowseRoutes(BaseHandler):
         attached = media.attached_subtitles(files)             # sous-titres d'une vidéo du dossier : ouverts depuis le lecteur, pas listés
         files = [f for f in files if f not in attached]
 
-        relative = current.relative_to(config.ROOT)
-        title = relative.name if relative.parts else (config.ROOT.name or "Bibliothèque")
+        relative = current.relative_to(config.library.root)
+        title = relative.name if relative.parts else (config.library.current.name)
         cards = [(f, card_kind(f)) for f in files]            # dans l'ordre du serveur (nom, ordre naturel) : c'est le tri par défaut
         counts = {}
         for _, kind in cards:
@@ -41,7 +41,7 @@ class BrowseRoutes(BaseHandler):
         parts = []
 
         crumbs = [render("browse/crumb_home", cls="" if relative.parts else "current",
-                         name=escape(config.ROOT.name or "Accueil"))]
+                         name=escape(config.library.current.name))]
         acc = []
         for i, comp in enumerate(relative.parts):
             acc.append(comp)
