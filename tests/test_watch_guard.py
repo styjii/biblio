@@ -83,3 +83,44 @@ class WatchGuardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js n'est pas installé")
+class LecteurLocalTests(unittest.TestCase):
+    """Le lecteur de l'accueil est le script de la page de lecture, en mode « local » (fichiers de l'appareil)."""
+
+    @classmethod
+    def setUpClass(cls):
+        harness = Path(__file__).resolve().parent / "js" / "local_player_harness.js"
+        out = subprocess.run(["node", str(harness)], capture_output=True, text=True, timeout=60)
+        assert out.returncode == 0, out.stderr
+        cls.r = json.loads(out.stdout)
+
+    def test_interface_proposee_a_la_page(self):
+        self.assertEqual(self.r["api"], ["add", "clear", "play", "remove"])
+
+    def test_sans_fichier_le_lecteur_est_masque_et_les_touches_restent_libres(self):
+        r = self.r["vide"]
+        self.assertTrue(r["hidden"])
+        self.assertEqual((r["count"], r["pos"]), (0, "0 / 0"))
+        self.assertTrue(r["espaceIgnore"])                           # espace : la page défile normalement
+
+    def test_ajout_filtre_les_fichiers_et_lance_le_premier(self):
+        r = self.r["ajout"]
+        self.assertEqual(r["result"], {"accepted": 3, "rejected": 1})   # c.txt n'est ni vidéo ni audio
+        self.assertEqual((r["src"], r["hidden"], r["count"], r["title"], r["pos"], r["rows"]), ("blob:1", False, 3, "a", "1 / 3", 3))
+        self.assertEqual(self.r["dernierEvenement"], {"count": 3})
+
+    def test_enchainement_comme_sur_la_page_de_lecture(self):
+        r = self.r["suite"]
+        self.assertEqual((r["src"], r["pos"], r["revoked"]), ("blob:2", "2 / 3", ["blob:1"]))   # l'URL précédente est libérée
+        self.assertEqual(r["poster"], "audio")                       # un son : image de remplacement dans le lecteur
+
+    def test_clic_dans_la_file_retrait_et_vidage(self):
+        self.assertEqual((self.r["clic"]["src"], self.r["clic"]["poster"], self.r["clic"]["pos"]), ("blob:3", "", "3 / 3"))
+        self.assertEqual((self.r["retraitAutre"]["count"], self.r["retraitAutre"]["pos"], self.r["retraitAutre"]["src"]), (2, "2 / 2", "blob:3"))
+        self.assertEqual((self.r["retraitCourant"]["count"], self.r["retraitCourant"]["src"], self.r["retraitCourant"]["pos"]), (1, "blob:4", "1 / 1"))
+        r = self.r["vidage"]
+        self.assertEqual((r["count"], r["hidden"], r.get("src"), r["poster"]), (0, True, None, ""))
+        self.assertEqual(r["revoked"], ["blob:1", "blob:2", "blob:3", "blob:4"])   # aucune URL locale ne reste ouverte
+        self.assertTrue(self.r["espaceApresVidage"])

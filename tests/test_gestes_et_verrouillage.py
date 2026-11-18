@@ -3,9 +3,10 @@ import re
 import unittest
 
 from app import assets, config
+from lecteur import player_py, watch_html
 
-WATCH_HTML = (assets.FRONTEND_DIR / "templates/player/watch.html").read_text(encoding="utf-8")
-PLAYER_PY = (config.HERE / "app/routes/player.py").read_text(encoding="utf-8")
+WATCH_HTML = watch_html()
+PLAYER_PY = player_py()
 
 
 class GlissementsTests(unittest.TestCase):

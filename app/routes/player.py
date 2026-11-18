@@ -13,6 +13,7 @@ from app.templating import render
 from app.utils import fmt_size, js_json
 from app.views.cards import video_row
 from app.views.layout import EDIT_LOCKED_HINT, doc_close, doc_open, folder_url, topbar
+from app.views.player import player_icons, shortcuts_hint, video_box
 from app.routes.base import BaseHandler
 
 
@@ -55,16 +56,16 @@ class PlayerRoutes(BaseHandler):
                 else:
                     sub_chips += render("player/subtitle_chip", q=fq, label=escape(label))
 
-        page = render("player/watch", q=q, tracks=tracks, title=escape(p.stem),
+        title = escape(p.stem)
+        box = video_box(f" src='/raw?f={q}'", tracks, title)
+        page = render("player/watch", box=box, hint=shortcuts_hint(), title=title,
                       folder_href=folder_url(p.parent), folder_name=escape(folder_name),
                       size=size, ext=p.suffix[1:].upper(),
                       sub_chips=sub_chips, pos=f"{idx + 1} / {len(siblings)}", rows="".join(video_row(v, p) for v in siblings))
         cfg = {"key": f"{config.library.root_id}:{rel_of(p)}", "folder": f"{config.library.root_id}:{rel_of(p.parent)}",
                "index": idx, "download": f"/raw?dl=1&f={q}",
                "items": [{"f": rel_of(x), "u": watch_url(x)} for x in siblings]}
-        wico = {n: icon(n, 24) for n in ("repeat", "repeat1", "volume", "mute", "play", "pause", "replay", "expand", "shrink",
-                                         "chevron_left", "check", "queue", "shuffle", "gauge", "captions", "download", "orientation",
-                                         "lock", "unlock")}
+        wico = player_icons()
         self.send_html(doc_open(f"{p.stem} — Ma bibliothèque") + topbar(False) + page
                        + doc_close(f"window.WCFG = {js_json(cfg)}; window.WICO = {js_json(wico)}; "
                                    f"{THEME_JS}{DECORATE_JS}{HOVER_PREVIEW_JS}{PROGRESS_JS}{WATCH_JS}"))

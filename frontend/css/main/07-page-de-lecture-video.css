@@ -80,8 +80,8 @@ a.chip:hover,a.btn:hover{background:var(--accent-soft); border-color:var(--accen
   .watch.theater .dock .player{aspect-ratio:var(--vp-ar,16/9); max-height:calc(100vh - var(--tb) - 190px); max-height:calc(100dvh - var(--tb) - 190px)}
   /* la playlist défile avec la page : sa barre de défilement (celle de la page) ne doit pas se dessiner par-dessus le lecteur fixe. Elle est masquée sur cette page,
      dans ce seul mode ; la liste défile toujours normalement au doigt, et PC / paysage bas / autres pages gardent leur barre. */
-  html:has(#watch){scrollbar-width:none}
-  html:has(#watch)::-webkit-scrollbar{display:none}
+  html:has(#watch:not([hidden])){scrollbar-width:none}
+  html:has(#watch:not([hidden]))::-webkit-scrollbar{display:none}
   .row.flash{animation:rowflash 1.4s ease-out}
   @media(prefers-reduced-motion:reduce){.row.flash{animation:none}}
 }

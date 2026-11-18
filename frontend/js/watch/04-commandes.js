@@ -14,6 +14,7 @@ class VideoPlayer {
   #shuffle = prefs.get('shuffle', '0') === '1';
   #pendingUrl = null;                                    // vidéo à ouvrir dès que le réseau revient
   #repeat = ['off', 'all', 'one'].includes(prefs.get('repeat', 'off')) ? prefs.get('repeat', 'off') : 'off';   // off | all | one
+  #local = local ? new LocalFiles(this) : null;            // lecteur de l'accueil : liste des fichiers de l'appareil
 
   constructor() {
     this.#guard = new PlaybackGuard();                     // s'abonne seul aux événements de la vidéo (reprise après coupure)
@@ -50,11 +51,67 @@ class VideoPlayer {
   #goto(target) {
     if (this.#switching) return;
     this.#order.save(target);
+    if (local) return this.#loadLocal(target);             // aucune page à ouvrir : le fichier est lu sur place
     if (!this.#isFullscreen()) return this.#leaveTo(target);
     // Plein écran : ouvrir une autre page le fermerait, et le navigateur interdit de le rouvrir sans geste de l'utilisateur.
     // La vidéo suivante est donc chargée dans le même lecteur, qui reste en plein écran. En cas d'échec : navigation classique.
     this.#switching = true;
     this.#loadInPlace(target).catch(() => this.#leaveTo(target)).finally(() => { this.#switching = false; });
+  }
+
+  /** Lecteur de l'accueil : lit le fichier local `target` dans le même lecteur (mêmes étapes que #loadInPlace, sans page à lire). */
+  #loadLocal(target) {
+    const item = items[target];
+    if (!item) return;
+    this.#resume.leave();
+    index = target;
+    const url = this.#local.open(target);                  // URL locale du fichier, affichage (titre, liste, image d'un son)
+    this.#guard.reset();
+    this.#resume.reset();
+    this.#order.restore(this.#shuffle);
+    video.src = url;
+    this.#ui.reload();
+    play();
+    this.#updateMediaTitle(item.f);
+  }
+
+  /* ----- lecteur local (accueil) : appelé par frontend/js/home/ et par la liste d'attente ----- */
+  /** Ajoute des fichiers ; le premier est lu s'il n'y avait rien. -> {accepted, rejected} */
+  addLocal(files) {
+    const wasEmpty = items.length === 0;
+    const result = this.#local.add(files);
+    if (!result.accepted) return result;
+    this.#order.rebuild(this.#shuffle);
+    if (wasEmpty) this.#goto(0);
+    else { this.#order.save(); this.#local.render(); }
+    return result;
+  }
+
+  playLocal(target) {
+    if (target !== index) this.#goto(target);
+  }
+
+  removeLocal(target) {
+    const wasCurrent = target === index;
+    this.#local.remove(target);
+    if (!items.length) return this.clearLocal();
+    if (wasCurrent) index = Math.min(target, items.length - 1);
+    else if (target < index) index -= 1;
+    this.#order.rebuild(this.#shuffle);
+    if (wasCurrent) this.#goto(index);
+    else { this.#order.save(); this.#local.render(); }
+  }
+
+  clearLocal() {
+    video.pause();
+    this.#local.clear();
+    video.removeAttribute('src');
+    video.load();
+    index = 0;
+    this.#guard.reset();
+    this.#resume.reset();
+    this.#order.rebuild(this.#shuffle);
+    this.#ui.reload();
   }
 
   #leaveTo(target) {
@@ -217,6 +274,7 @@ class VideoPlayer {
   /* ----- clavier ----- */
   #onKey(e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (local && !items.length) return;                    // accueil sans fichier : les touches (espace…) gardent leur rôle dans la page
     const tag = (e.target.tagName || '').toLowerCase();
     const type = (e.target.type || '').toLowerCase();
     if (tag === 'textarea' || (tag === 'input' && type !== 'range')) return;
@@ -268,9 +326,12 @@ class VideoPlayer {
   /** Touches multimédia du téléphone / du clavier et écran de verrouillage : titre, dossier et vignette de la vidéo en cours. */
   #updateMediaTitle(title) {
     if (!('mediaSession' in navigator)) return;
-    const folder = document.querySelector('.chips .chip')?.textContent?.trim() ?? '';
-    const art = `/thumb?f=${encodeURIComponent(items[index].f)}`;
-    try { navigator.mediaSession.metadata = new MediaMetadata({title, artist: folder, album: 'Ma bibliothèque', artwork: [{src: art}]}); } catch { /* titre non affiché sur l'écran de verrouillage */ }
+    const metadata = {title, album: 'Ma bibliothèque'};
+    if (!local) {                                           // dossier et vignette : fichiers de la bibliothèque seulement
+      metadata.artist = document.querySelector('.chips .chip')?.textContent?.trim() ?? '';
+      metadata.artwork = [{src: `/thumb?f=${encodeURIComponent(items[index].f)}`}];
+    }
+    try { navigator.mediaSession.metadata = new MediaMetadata(metadata); } catch { /* titre non affiché sur l'écran de verrouillage */ }
   }
 
   /** Position, durée et vitesse annoncées au système : la barre de progression de l'écran de verrouillage suit la vidéo et peut être déplacée. */
@@ -300,4 +361,12 @@ class VideoPlayer {
   }
 }
 
-new VideoPlayer();
+const player = new VideoPlayer();
+if (local) {                                               // interface proposée à la page d'accueil
+  window.BiblioLocal = {
+    add: (files) => player.addLocal(files),
+    play: (target) => player.playLocal(target),
+    remove: (target) => player.removeLocal(target),
+    clear: () => player.clearLocal(),
+  };
+}

@@ -21,7 +21,7 @@ class PleinEcranSuivanteTests(unittest.TestCase):
         for needle in ("this.#guard.reset()", "this.#resume.reset()", "this.#resume.leave()", "this.#ui.reload()", "this.#order.restore("):
             self.assertIn(needle, self.js)
         self.assertIn("let {index} = cfg;", self.js)                      # l'index de la vidéo ouverte peut changer
-        self.assertIn("get #rel() { return items[index].f; }", self.js)   # position mémorisée : toujours celle de la vidéo ouverte
+        self.assertIn("get #rel() { return items[index]?.f ?? ''; }", self.js)   # position mémorisée : toujours celle de la vidéo ouverte
 
     def test_le_plein_ecran_n_est_jamais_ferme(self):
         body = self.js.split("async #loadInPlace(target) {")[1].split("#applyPage(page) {")[0]

@@ -4,6 +4,9 @@ const cfg = window.WCFG;
 const {items} = cfg;                                     // vidéos du dossier [{f: chemin, u: adresse}]
 let {index} = cfg;                                       // position de la vidéo ouverte (change quand la vidéo suivante est chargée sur place, en plein écran)
 const icons = window.WICO ?? {};
+const local = cfg.local === true;                        // lecteur de l'accueil : fichiers de l'appareil, lus sur place (voir 03-fichiers-locaux.js) ; sinon, page de lecture du serveur
+/** Position de lecture : mémorisée par le serveur pour les fichiers de la bibliothèque, sans objet pour un fichier local. */
+const Progress = local ? {fmt: (seconds) => globalThis.Progress.fmt(seconds), get: async () => null, save() {}, done() {}} : globalThis.Progress;
 const $ = (id) => document.getElementById(id);
 const video = $('player');
 

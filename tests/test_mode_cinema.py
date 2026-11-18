@@ -3,6 +3,7 @@ import re
 import unittest
 
 from app import assets
+from lecteur import watch_html
 from test_mobile_sticky import media_block
 
 
@@ -10,7 +11,7 @@ class BoutonCinemaTests(unittest.TestCase):
     css = assets.CSS
 
     def test_bouton_sans_restriction_d_ecran(self):
-        html = (assets.FRONTEND_DIR / "templates/player/watch.html").read_text(encoding="utf-8")
+        html = watch_html()
         button = re.search(r"<button[^>]*data-act='theater'[^>]*>", html).group(0)
         self.assertNotIn("vp-desk", button)
         self.assertNotIn("hidden", button)

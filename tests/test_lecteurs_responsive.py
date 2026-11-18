@@ -3,11 +3,12 @@ import re
 import unittest
 
 from app import assets
+from lecteur import watch_html
 
 
 class LecteurVideoTests(unittest.TestCase):
     def test_gabarit_sans_commande_externe(self):
-        html = (assets.FRONTEND_DIR / "templates/player/watch.html").read_text(encoding="utf-8")
+        html = watch_html()
         for gone in ("wbar", "wctrls", "id='autonext'", "id='w-", "class='switch'"):
             self.assertNotIn(gone, html)
         self.assertNotIn("raw?dl=1", html)                        # le téléchargement est dans le menu des paramètres

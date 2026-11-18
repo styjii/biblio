@@ -4,11 +4,13 @@ from html import escape
 from urllib.parse import quote
 
 from app import config
-from app.assets import HOME_CSS, HOME_JS, THEME_JS
+from app.assets import HOME_CSS, HOME_JS, PROGRESS_JS, THEME_JS, WATCH_JS
 from app.devices import monitor
 from app.icons import icon
 from app.templating import render
+from app.utils import js_json
 from app.views.layout import doc_close, doc_open, lock_script, topbar
+from app.views.player import player_icons, shortcuts_hint, video_box
 
 FREQUENT_LIMIT = 5
 
@@ -74,7 +76,12 @@ def _frequent(ip):
 def home_page(ip):
     roots, roots_count = _roots()
     frequent, frequent_count = _frequent(ip)
+    player = render("home/player", box=video_box("", "", ""), hint=shortcuts_hint())
     body = render("home/body", roots=roots, roots_count=roots_count, frequent=frequent, frequent_count=frequent_count,
-                  player=render("home/player"))
+                  player=player)
+    # Même script que la page de lecture vidéo, en mode « local » : la liste est celle des fichiers choisis sur l'appareil
+    cfg = {"local": True, "folder": "local", "key": "local", "index": 0, "download": "", "items": []}
+    wico = player_icons("film", "music", "close")
     return (doc_open("Accueil — Ma bibliothèque", "", HOME_CSS) + topbar(False, True) + body
-            + doc_close(f"{THEME_JS}{HOME_JS}", after=lock_script()))
+            + doc_close(f"window.WCFG = {js_json(cfg)}; window.WICO = {js_json(wico)}; {THEME_JS}{PROGRESS_JS}{WATCH_JS}{HOME_JS}",
+                        after=lock_script()))

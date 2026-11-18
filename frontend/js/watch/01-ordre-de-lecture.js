@@ -1,13 +1,13 @@
 
 /** Ordre de lecture des vidéos du dossier : dans l'ordre, ou mélangé. Le mélange est conservé d'une vidéo à l'autre (dans cet onglet). */
 class PlayOrder {
-  #count = items.length;
   #key = `vl:order:${cfg.folder}`;
-  #signature = (() => {                                  // change si le contenu du dossier change : l'ancien mélange n'est alors plus valable
+  get #count() { return items.length; }                   // la liste du lecteur local change (ajout, retrait de fichiers)
+  get #signature() {                                     // change si le contenu du dossier change : l'ancien mélange n'est alors plus valable
     let hash = 0;
     for (const char of items.map((t) => t.f).join('|')) hash = (hash * 31 + char.charCodeAt(0)) | 0;
     return `${hash}:${items.length}`;
-  })();
+  }
   #order = [];
   #pos = 0;
 

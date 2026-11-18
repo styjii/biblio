@@ -203,10 +203,13 @@ Recommandations :
 - **Fichiers fréquents** : les 5 fichiers que **cet appareil** a le plus consultés (30 derniers jours, vidéo, audio,
   PDF, texte, web, images). Un clic réactive le bon dossier d'entrée puis ouvre le fichier. Les fichiers supprimés
   sont ignorés.
-- **Lecteur multimédia** : choisir ou glisser-déposer (n'importe où sur la page) des vidéos et des sons de l'appareil.
-  Le navigateur les lit directement depuis le disque (URL locale) : **rien n'est copié ni envoyé au serveur**.
-  Plusieurs fichiers forment une liste (précédent, suivant, enchaînement automatique, retrait). Un format ou un codec
-  que le navigateur ne sait pas lire est signalé.
+- **Lecteur multimédia** : c'est **le même lecteur que la page de lecture vidéo** (même gabarit `player/video_box`,
+  mêmes commandes, mêmes raccourcis, même script `frontend/js/watch/`, même mise en page : liste à droite, lecteur fixe
+  sur mobile), en mode « local ». Tu choisis ou tu glisses (n'importe où sur la page) des vidéos et des sons de
+  l'appareil ; le navigateur les lit directement depuis le disque (URL locale) : **rien n'est copié ni envoyé au
+  serveur**. La liste d'attente remplace « Dans ce dossier » (clic pour lire, × pour retirer, précédent / suivante,
+  aléatoire, répétition, lecture automatique). Différences voulues : pas de reprise de position mémorisée par le
+  serveur, pas de sous-titres externes, et un son s'affiche sur une image de remplacement.
 
 ### Navigation (`/browse`)
 

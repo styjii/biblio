@@ -265,9 +265,9 @@ class HomeServerTests(unittest.TestCase):
 
     def test_accueil_a_les_trois_blocs(self):
         _, _, home = self.get("/")
-        for marker in ("Dossier d'entrée", "Fichiers fréquents", "id='mp-stage'", "id='mp-input'", "id='mp-drop'"):
+        for marker in ("Dossier d'entrée", "Fichiers fréquents", "id='mp-zone'", "id='mp-input'", "id='mp-drop'"):
             self.assertIn(marker, home)
-        self.assertIn("class LocalPlayer", home)
+        self.assertIn("window.BiblioLocal", home)           # le lecteur local est le script de la page de lecture
 
     def test_sans_cookie_acces_refuse(self):
         self.assertEqual(self.fetch("GET", "/")[0], 401)
@@ -277,6 +277,30 @@ class HomeServerTests(unittest.TestCase):
         status, r, _ = self.get("/?folder=dossier")
         self.assertEqual(status, 302)
         self.assertEqual(r.getheader("Location"), "/browse?folder=dossier")
+
+    # --- lecteur : le même que celui de la page de lecture vidéo ---
+    @staticmethod
+    def player_markup(html):
+        """Zone du lecteur (image, commandes, menu, verrouillage), sans ce qui varie d'une vidéo à l'autre."""
+        zone = html.split("<div class='player' id='vbox'")[1].split("<section class='info'>")[0]
+        zone = re.sub(r" src='[^']*'", "", zone)
+        zone = re.sub(r"<track [^>]*>", "", zone)
+        return re.sub(r"<div class='vp-top'>[^<]*</div>", "<div class='vp-top'></div>", zone)
+
+    def test_lecteur_de_l_accueil_identique_a_celui_de_la_page_de_lecture(self):
+        _, _, home = self.get("/")
+        _, _, watch = self.get("/watch?f=clip.mp4", f"; fl_root={self.root_id('Disque interne')}")
+        self.assertEqual(self.player_markup(home), self.player_markup(watch))      # mêmes commandes, mêmes icônes, même structure
+        for command in ("data-act='prev'", "data-act='back'", "data-act='play'", "data-act='fwd'", "data-act='next'", "data-act='mute'",
+                        "data-act='settings'", "data-act='theater'", "data-act='pip'", "data-act='fs'", "id='vp-seek'", "id='vp-lock'", "id='vp-menu'"):
+            self.assertIn(command, home)
+        # mêmes raccourcis documentés, même script (un seul exemplaire de chaque classe du lecteur)
+        self.assertIn("<kbd>K</kbd> lecture/pause", home)
+        for cls in ("class PlayerUI", "class VideoPlayer", "class PlaybackGuard", "class PlayOrder", "class LocalFiles"):
+            self.assertEqual(home.count(cls), 1, cls)
+        self.assertEqual(watch.count("class PlayerUI"), 1)
+        self.assertNotIn("class LocalPlayer", home)                  # l'ancien lecteur de l'accueil n'existe plus
+        self.assertIn('"local":true', home.replace(" ", ""))        # mode « fichiers de l'appareil » : aucune route du serveur n'est utilisée
 
     # --- choix du dossier d'entrée ---
     def test_choisir_un_disque_puis_parcourir_ses_fichiers(self):

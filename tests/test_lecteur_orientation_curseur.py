@@ -2,6 +2,7 @@
 import unittest
 
 from app import assets, config
+from lecteur import player_py
 from app.icons import ICONS
 
 
@@ -36,7 +37,7 @@ class OrientationPleinEcranTests(unittest.TestCase):
 
     def test_icone_fournie_au_lecteur(self):
         self.assertIn("orientation", ICONS)
-        player = (config.HERE / "app/routes/player.py").read_text(encoding="utf-8")
+        player = player_py()
         self.assertIn('"download", "orientation"', player)
 
 

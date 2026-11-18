@@ -180,7 +180,7 @@ class PlaybackGuard {
   #fallbackPosition(step) {
     const back = PlaybackGuard.DECODE_BACKOFF[step];
     if (back !== undefined && this.#recoveredAt - back > 0) return this.#recoveredAt - back;
-    Progress.done(items[index].f);
+    Progress.done(items[index]?.f);
     return 0;
   }
 
@@ -189,7 +189,7 @@ class PlaybackGuard {
     this.#recovering = false;
     this.#restore = null;
     this.#good = 0;
-    Progress.done(items[index].f);                            // la position mémorisée est oubliée : le prochain chargement repart de 0:00
+    Progress.done(items[index]?.f);                            // la position mémorisée est oubliée : le prochain chargement repart de 0:00
     say('Cette vidéo ne peut pas être décodée par ce navigateur, même depuis le début. Clique sur la vidéo pour réessayer.');
     this.onFatal?.('Cette vidéo ne peut pas être décodée par ce navigateur.');
   }

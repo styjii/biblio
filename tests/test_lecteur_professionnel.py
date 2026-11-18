@@ -3,8 +3,9 @@ import re
 import unittest
 
 from app import assets, config
+from lecteur import player_py, watch_html
 
-WATCH_HTML = (assets.FRONTEND_DIR / "templates/player/watch.html").read_text(encoding="utf-8")
+WATCH_HTML = watch_html()
 
 
 class EcranDErreurTests(unittest.TestCase):
@@ -56,7 +57,7 @@ class TouchesMultimediaTests(unittest.TestCase):
 
     def test_titre_dossier_et_vignette(self):
         meta = self.js.split("#updateMediaTitle(title) {")[1].split("\n  }\n")[0]
-        self.assertIn("artist: folder", meta)
+        self.assertIn("metadata.artist = document.querySelector('.chips .chip')?.textContent", meta)       # dossier : fichiers de la bibliothèque
         self.assertIn("/thumb?f=${encodeURIComponent(items[index].f)}", meta)
 
 
@@ -99,7 +100,7 @@ class VitesseEtListeTests(unittest.TestCase):
 
     def test_position_dans_la_liste(self):
         self.assertIn("<span class='cnt' id='list-pos'>{{ pos }}</span>", WATCH_HTML)
-        src = (config.HERE / "app/routes/player.py").read_text(encoding="utf-8")
+        src = player_py()
         self.assertIn('pos=f"{idx + 1} / {len(siblings)}"', src)
         self.assertIn("document.querySelector('.next h2').innerHTML = page.querySelector('.next h2')?.innerHTML", self.js)   # suit la vidéo sur place
 

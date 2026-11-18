@@ -3,7 +3,7 @@
 class ResumeTracker {
   static SAVE_EVERY = 5000;                               // ms entre deux enregistrements pendant la lecture
 
-  get #rel() { return items[index].f; }                   // la vidéo ouverte (peut changer : voir leave / reset)
+  get #rel() { return items[index]?.f ?? ''; }                   // la vidéo ouverte (peut changer : voir leave / reset)
   #resume = null;                                         // position mémorisée {t, d}
   #fetched = false;
   #resumed = false;                                       // à partir d'ici seulement, on peut enregistrer sans écraser la position mémorisée

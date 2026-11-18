@@ -1,30 +1,27 @@
-{# Lecteur local : le fichier choisi ou déposé est lu par le navigateur (URL locale), sans passer par le serveur. #}
-<div class='mp' id='mp'>
-  <div class='mp-stage' id='mp-stage'>
-    <video id='mp-video' controls playsinline preload='metadata' hidden></video>
-    <div class='mp-audio' id='mp-audio-box' hidden>
-      <span class='ico media'>{{ icon music 30 }}</span>
-      <div class='mp-audio-title' id='mp-audio-title'></div>
-      <audio id='mp-audio' controls preload='metadata'></audio>
-    </div>
-    <div class='mp-drop' id='mp-drop' role='button' tabindex='0' aria-label='Choisir ou déposer un fichier vidéo ou audio'>
-      <span class='ico media'>{{ icon upload 26 }}</span>
-      <div class='mp-drop-title'>Glisse une vidéo ou un son ici</div>
-      <div class='sub'>ou</div>
-      <button type='button' class='pill primary' id='mp-pick'>{{ icon play 16 }}Choisir des fichiers</button>
-      <div class='sub'>Lecture directe depuis cet appareil : rien n'est copié ni envoyé au serveur.</div>
-    </div>
-  </div>
-  <div class='mp-bar' id='mp-bar' hidden>
-    <div class='mp-now' id='mp-now'></div>
-    <div class='mp-actions'>
-      <button type='button' class='pill sm' id='mp-prev' title='Précédent'>{{ icon prev 16 }}Précédent</button>
-      <button type='button' class='pill sm' id='mp-next' title='Suivant'>{{ icon next 16 }}Suivant</button>
-      <button type='button' class='pill sm' id='mp-add' title='Ajouter des fichiers'>{{ icon plus 16 }}Ajouter</button>
-      <button type='button' class='pill sm' id='mp-clear' title='Vider la liste'>{{ icon close 16 }}Vider</button>
-    </div>
+{# Lecteur multimédia local : même lecteur que la page de lecture vidéo (gabarit player/video_box, script frontend/js/watch/), alimenté par des fichiers de l'appareil lus sur place, sans copie sur le serveur. Tant qu'aucun fichier n'est choisi, seule la zone de dépôt est visible. #}
+<div class='mp' id='mp-zone'>
+  <div class='mp-drop' id='mp-drop' role='button' tabindex='0' aria-label='Choisir ou déposer un fichier vidéo ou audio'>
+    <span class='ico media'>{{ icon upload 26 }}</span>
+    <div class='mp-drop-title'>Glisse une vidéo ou un son ici</div>
+    <div class='sub'>ou</div>
+    <button type='button' class='pill primary' id='mp-pick'>{{ icon play 16 }}Choisir des fichiers</button>
+    <div class='sub'>Lecture directe depuis cet appareil : rien n'est copié ni envoyé au serveur.</div>
   </div>
   <div class='mp-error' id='mp-error' role='alert' hidden></div>
-  <div class='mp-list' id='mp-list' hidden></div>
+  <div class='watch' id='watch' hidden>
+    <div class='dock' id='dock'>
+      {{ box }}
+      <section class='info'>
+        <h1 class='vtitle'></h1>
+        <div class='chips'>
+          <span class='chip muted' id='mp-meta'></span>
+          <button class='chip' type='button' id='mp-add'>{{ icon plus 16 }}Ajouter des fichiers</button>
+          <button class='chip' type='button' id='mp-clear'>{{ icon close 16 }}Vider la liste</button>
+        </div>
+        {{ hint }}
+      </section>
+    </div>
+    <aside class='next'><h2>File d'attente <span class='cnt' id='list-pos'>0 / 0</span></h2><div class='list' id='mp-list'></div></aside>
+  </div>
   <input type='file' id='mp-input' accept='video/*,audio/*,.mkv,.mka,.flac,.m4a,.opus,.ogg,.oga,.wav,.avi,.mov,.ts' multiple hidden>
 </div>

@@ -179,8 +179,8 @@ class PlayerUI {
   /** Télécharge la vidéo en cours (lien de téléchargement du serveur, sans quitter la page). */
   download() {
     const link = document.createElement('a');
-    link.href = cfg.download;
-    link.download = '';
+    link.href = local ? items[index].u : cfg.download;      // fichier local : l'URL locale du fichier choisi
+    link.download = local ? items[index].f : '';
     document.body.append(link);
     link.click();
     link.remove();

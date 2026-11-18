@@ -4,6 +4,7 @@ import re
 import unittest
 
 from app import assets
+from lecteur import watch_html
 from test_mobile_sticky import media_block
 
 FIXED = "max-width:999px) and (min-height:501px"
@@ -13,7 +14,7 @@ class DockMobileFixeTests(unittest.TestCase):
     css = assets.CSS
 
     def test_gabarit_lecteur_et_informations_dans_un_meme_conteneur(self):
-        html = (assets.FRONTEND_DIR / "templates/player/watch.html").read_text(encoding="utf-8")
+        html = watch_html()
         dock = html[html.index("<div class='dock' id='dock'>"):html.index("<aside class='next'>")]
         self.assertIn("id='vbox'", dock)
         self.assertIn("class='info'", dock)
@@ -45,11 +46,11 @@ class DockMobileFixeTests(unittest.TestCase):
     def test_barre_de_defilement_masquee_seulement_en_mode_fixe(self):
         """La barre de la page (celle de la playlist) ne s'affiche pas par-dessus le lecteur fixe ; ailleurs, elle reste."""
         block = media_block(self.css, FIXED)
-        self.assertIn("html:has(#watch){scrollbar-width:none}", block)
-        self.assertIn("html:has(#watch)::-webkit-scrollbar{display:none}", block)
+        self.assertIn("html:has(#watch:not([hidden])){scrollbar-width:none}", block)
+        self.assertIn("html:has(#watch:not([hidden]))::-webkit-scrollbar{display:none}", block)
         outside = self.css.replace(block, "")
-        self.assertNotIn("scrollbar-width:none}\n  html:has(#watch)", outside)
-        self.assertNotIn("html:has(#watch)", outside)
+        self.assertNotIn("scrollbar-width:none}\n  html:has(#watch", outside)
+        self.assertNotIn("html:has(#watch", outside)
 
     def test_clignotement_seulement_en_mode_fixe(self):
         outside = self.css.replace(media_block(self.css, FIXED), "")
