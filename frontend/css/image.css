@@ -1,0 +1,61 @@
+/* ---------- Visionneuse d'images : barre d'outils + scène plein cadre ---------- */
+.iv{
+  max-width:none; margin:0; padding:0; display:flex; flex-direction:column;
+  height:calc(100vh - var(--tb)); height:calc(100dvh - var(--tb));
+}
+.iv-bar{
+  display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; padding:10px max(14px,env(safe-area-inset-left)) 10px max(14px,env(safe-area-inset-right));
+  background:var(--surface); border-bottom:1px solid var(--border);
+}
+.iv-title{flex:1 1 160px; min-width:0}
+.iv-name{font-weight:600; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.iv-title .sub{margin-top:0}
+.iv-tools{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+.iv-sep{width:1px; height:22px; margin:0 4px; background:var(--border)}
+.iv-btn,.iv-zoom{
+  display:inline-grid; place-items:center; height:38px; min-width:38px; padding:0 8px; border-radius:10px; cursor:pointer;
+  color:var(--text); background:var(--bg-2); border:1px solid var(--border); font:inherit; font-size:13px; font-weight:600;
+  transition:background .15s,border-color .15s,color .15s;
+}
+.iv-zoom{min-width:64px; font-variant-numeric:tabular-nums}
+.iv-btn:hover:not(:disabled),.iv-zoom:hover{border-color:var(--accent); color:var(--accent)}
+.iv-btn:focus-visible,.iv-zoom:focus-visible,.iv-nav:focus-visible,.iv-stage:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.iv-btn:disabled{opacity:.4; cursor:not-allowed}
+.iv-stage{
+  position:relative; flex:1; min-height:0; overflow:hidden; background:#0d0f14; touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none;
+}
+.iv-stage.zoomed{cursor:grab}
+.iv-stage.panning{cursor:grabbing}
+.iv-stage:fullscreen{background:#000}
+#iv-img{
+  position:absolute; left:0; top:0; max-width:none; transform-origin:0 0; will-change:transform; visibility:hidden;
+  -webkit-user-drag:none; image-rendering:auto;
+}
+#iv-img.px{image-rendering:pixelated}                 /* agrandi au-delà de 300 % : pixels nets plutôt que flous */
+.iv-nav{
+  position:absolute; top:50%; z-index:2; width:48px; height:64px; margin-top:-32px; display:grid; place-items:center; cursor:pointer;
+  color:#fff; background:rgba(0,0,0,.45); border:0; border-radius:12px; backdrop-filter:blur(4px); opacity:0; transition:opacity .2s,background .15s;
+}
+.iv-nav.prev{left:10px}
+.iv-nav.next{right:10px}
+.iv-stage:hover .iv-nav,.iv-nav:focus-visible{opacity:1}
+.iv-nav:hover{background:rgba(0,0,0,.7)}
+.iv-nav:disabled{display:none}
+@media(pointer:coarse){.iv-nav{opacity:.75}}
+.iv-msg{
+  position:absolute; left:50%; top:50%; z-index:1; transform:translate(-50%,-50%); display:flex; align-items:center; gap:8px; max-width:min(90%,420px);
+  padding:10px 16px; border-radius:12px; color:#fff; background:rgba(0,0,0,.65); text-align:center; pointer-events:none;
+}
+.iv-msg.err{background:rgba(160,30,30,.85)}
+.iv-msg svg{animation:ivspin 1s linear infinite}
+.iv-msg.err svg{animation:none}
+@keyframes ivspin{to{transform:rotate(360deg)}}
+.iv-hint{margin:0; padding:8px 14px calc(8px + env(safe-area-inset-bottom)); font-size:12.5px; color:var(--muted); background:var(--surface); border-top:1px solid var(--border); text-align:center}
+.iv-hint kbd{display:inline-block; min-width:20px; padding:0 5px; border-radius:5px; border:1px solid var(--border); background:var(--bg-2); font:inherit; font-size:12px; line-height:1.5}
+@media(pointer:coarse),(max-width:760px){.iv-hint{display:none}}
+@media(max-width:640px){
+  .iv-lbl{display:none}
+  .iv-tools{width:100%; justify-content:space-between}
+  .iv-title{order:2; flex-basis:calc(100% - 70px)}
+}
+@media(prefers-reduced-motion:reduce){.iv-msg svg{animation:none}.iv-nav{transition:none}}

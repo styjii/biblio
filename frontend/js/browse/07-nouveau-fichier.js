@@ -34,6 +34,7 @@ class NewFileDialog {
 /* ----- mise en route ----- */
 new Listing();
 new ListSort();
+new ViewMode();
 const sheet = new Sheet();
 const deleteDialog = new DeleteDialog(sheet);
 const renameDialog = new RenameDialog(sheet);

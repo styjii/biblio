@@ -232,6 +232,8 @@ class ActivityHistory:
             return "audio", arg("f")
         if path == "/pdf":
             return "pdf", arg("f")
+        if path == "/image":
+            return "image", arg("f")
         if path == "/preview":
             pf = config.paths.resolve(arg("f"))
             return ("text" if pf is not None and pf.suffix.lower() in MD_EXT else "web"), arg("f")

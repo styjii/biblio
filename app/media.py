@@ -107,6 +107,19 @@ class MediaLibrary:
 
         return self._cached_image(key, attempts)
 
+    def image_thumbnail(self, path):
+        """Miniature JPEG d'une image (ffmpeg), None si impossible (format inconnu de ffmpeg, ffmpeg absent)."""
+        if not self.ffmpeg:
+            return None
+        _, mtime, size = self._signature(path)
+        key = hashlib.sha1(f"image|{path}|{mtime}|{size}".encode()).hexdigest()
+
+        def attempts(tmp):
+            yield [self.ffmpeg, "-v", "error", "-y", "-i", str(path), "-frames:v", "1",
+                   "-vf", "scale='min(480,iw)':-2", "-q:v", "5", str(tmp)]
+
+        return self._cached_image(key, attempts)
+
     # --- audio ---
     def audio_info(self, path):
         """Durée, titre, artiste, album d'un fichier audio (ffprobe), mis en cache.

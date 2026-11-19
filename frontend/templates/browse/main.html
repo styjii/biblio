@@ -1,1 +1,3 @@
-<main>{{ content }}</main>
+{# Le mode d'affichage est un réglage global (mémorisé sous « fl:view ») : le script l'applique avant le premier affichage de la liste, sans à-coup, dans chaque dossier. #}
+<main id='listing'>{{ content }}</main>
+<script>try{const v=localStorage.getItem('fl:view');if(v)document.getElementById('listing').dataset.view=v}catch(e){}</script>

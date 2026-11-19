@@ -1,0 +1,74 @@
+/* ---------- Modes d'affichage de la liste (sélecteur « Affichage », à côté du tri) ----------
+   <main id="listing" data-view="…"> : large | medium (par défaut : aspect d'origine, aucune règle ci-dessous) | small | list | details.
+   Le mode est un réglage global, mémorisé dans le navigateur et valable pour tous les dossiers (frontend/js/browse/01-modes-d-affichage.js). Les règles ne visent que les cartes
+   des sections « Dossiers » et « Fichiers » (enfants directs de .grid / .files), jamais le lien de retour ni les autres blocs. */
+.ico{position:relative; overflow:hidden}
+.fthumb{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none; background:var(--bg-2)}   /* miniature d'une image : visible hors du mode « moyennes » */
+.cols,.dhead{display:none}
+.vcard{position:relative}
+
+/* grandes icônes : vignettes larges 16/9, nom centré dessous */
+main[data-view='large'] :is(.grid,.files){grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px}
+main[data-view='large'] :is(.grid,.files) > .item{position:relative; flex-direction:column; align-items:stretch; gap:10px; padding:10px; text-align:center}
+main[data-view='large'] :is(.grid,.files) > .item .ico{width:100%; height:auto; aspect-ratio:16/9; border-radius:10px}
+main[data-view='large'] :is(.grid,.files) > .item .ico svg{width:34%; height:auto}
+main[data-view='large'] :is(.grid,.files) > .item .text{flex:none}
+main[data-view='large'] :is(.grid,.files) > .item .go{display:none}
+main[data-view='large'] :is(.grid,.files) > .item .more{position:absolute; top:16px; right:16px; color:#fff; background:rgba(0,0,0,.55); backdrop-filter:blur(4px)}
+main[data-view='large'] .fthumb{display:block}
+
+/* petites icônes : tuiles carrées compactes */
+main[data-view='small'] :is(.grid,.files){grid-template-columns:repeat(auto-fill,minmax(128px,1fr)); gap:10px}
+main[data-view='small'] :is(.grid,.files) > .item{position:relative; flex-direction:column; align-items:stretch; gap:6px; padding:8px; text-align:center}
+main[data-view='small'] :is(.grid,.files) > .item .ico{width:100%; height:auto; aspect-ratio:1; border-radius:9px}
+main[data-view='small'] :is(.grid,.files) > .item .ico svg{width:36%; height:auto}
+main[data-view='small'] :is(.grid,.files) > .item .text{flex:none}
+main[data-view='small'] :is(.grid,.files) > .item .name,main[data-view='small'] :is(.grid,.files) > .vcard .vname{font-size:12.5px}
+main[data-view='small'] :is(.grid,.files) > .item .sub,main[data-view='small'] :is(.grid,.files) > .item .go,
+main[data-view='small'] :is(.grid,.files) > .vcard .vsub,main[data-view='small'] :is(.grid,.files) > .vcard .play{display:none}
+main[data-view='small'] :is(.grid,.files) > .item .more{position:absolute; top:12px; right:12px; color:#fff; background:rgba(0,0,0,.55); backdrop-filter:blur(4px)}
+main[data-view='small'] :is(.grid,.files) > .vcard .thumb{aspect-ratio:1}
+main[data-view='small'] :is(.grid,.files) > .vcard .vinfo{padding:6px 8px 8px}
+main[data-view='small'] .fthumb{display:block}
+
+/* liste : une ligne par élément, plusieurs colonnes quand la largeur le permet */
+main[data-view='list'] :is(.grid,.files){grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:6px 12px}
+main[data-view='list'] :is(.grid,.files) > .item{gap:10px; padding:5px 10px; border-radius:10px; box-shadow:none}
+main[data-view='list'] :is(.grid,.files) > .item .ico{width:30px; height:30px; border-radius:8px}
+main[data-view='list'] :is(.grid,.files) > .item .ico svg{width:16px; height:16px}
+main[data-view='list'] :is(.grid,.files) > .item .name,main[data-view='list'] :is(.grid,.files) > .vcard .vname{font-size:14px; -webkit-line-clamp:1}
+main[data-view='list'] :is(.grid,.files) > .item .sub,main[data-view='list'] :is(.grid,.files) > .vcard .vsub{display:none}
+main[data-view='list'] :is(.grid,.files) > .vcard{display:flex; align-items:center; gap:10px; padding:5px 10px; border-radius:10px; box-shadow:none}
+main[data-view='list'] :is(.grid,.files) > .vcard .thumb{width:30px; flex:none; aspect-ratio:1; border-radius:8px}
+main[data-view='list'] :is(.grid,.files) > .vcard :is(.play,.dur,.bar){display:none}
+main[data-view='list'] :is(.grid,.files) > .vcard .vinfo{flex:1; min-width:0; padding:0}
+main[data-view='list'] :is(.grid,.files) > .vcard .more{position:static; flex-shrink:0}
+main[data-view='list'] .fthumb{display:block}
+main[data-view='list'] video.pv{display:none}              /* pas d'aperçu animé sur une vignette de 30 px */
+
+/* détails : tableau, une ligne par élément (nom, modifié le, taille, type) */
+main[data-view='details']{--dcols:32px minmax(0,1fr) 150px 80px 90px 36px}
+main[data-view='details'] .dhead{display:grid; grid-template-columns:var(--dcols); gap:10px; padding:0 15px; margin:-4px 0 6px; font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+main[data-view='details'] .dhead > span:nth-child(4){text-align:right}
+main[data-view='details'] :is(.grid,.files){grid-template-columns:minmax(0,1fr); gap:6px}
+main[data-view='details'] :is(.grid,.files) > :is(.item,.vcard){display:grid; grid-template-columns:var(--dcols); align-items:center; gap:10px; padding:5px 14px; border-radius:10px; box-shadow:none}
+main[data-view='details'] :is(.grid,.files) > .item .ico{width:32px; height:32px; border-radius:8px}
+main[data-view='details'] :is(.grid,.files) > .item .ico svg{width:17px; height:17px}
+main[data-view='details'] :is(.grid,.files) > .item .name,main[data-view='details'] :is(.grid,.files) > .vcard .vname{font-size:14px; -webkit-line-clamp:1}
+main[data-view='details'] :is(.grid,.files) > .item .sub,main[data-view='details'] :is(.grid,.files) > .vcard .vsub{display:none}
+main[data-view='details'] :is(.grid,.files) > .vcard .thumb{width:32px; aspect-ratio:1; border-radius:8px}
+main[data-view='details'] :is(.grid,.files) > .vcard :is(.play,.dur,.bar){display:none}
+main[data-view='details'] :is(.grid,.files) > .vcard .vinfo{padding:0; min-width:0}
+main[data-view='details'] :is(.grid,.files) > .vcard .more{position:static; justify-self:end}
+main[data-view='details'] :is(.grid,.files) > .item :is(.go,.more){justify-self:end}
+main[data-view='details'] .cols{display:contents}
+main[data-view='details'] :is(.c-date,.c-size,.c-type){font-size:13px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+main[data-view='details'] .c-size{text-align:right}
+main[data-view='details'] .fthumb{display:block}
+main[data-view='details'] video.pv{display:none}
+@media(max-width:640px){
+  main[data-view='details']{--dcols:32px minmax(0,1fr) 72px 36px}
+  main[data-view='details'] :is(.c-date,.c-type),main[data-view='details'] .dhead > :is(span:nth-child(3),span:nth-child(5)){display:none}
+  main[data-view='details'] :is(.grid,.files) > :is(.item,.vcard){padding:5px 10px}
+}
+.viewsel select{min-width:0}

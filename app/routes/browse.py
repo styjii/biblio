@@ -10,7 +10,7 @@ from app.icons import ICONS, icon
 from app.templating import render
 from app.utils import js_json
 from app.media import media
-from app.views.cards import GROUPS, file_card, group_of, sort_attrs, video_card
+from app.views.cards import GROUPS, columns, file_card, group_of, sort_attrs, video_card
 from app.views.layout import doc_close, doc_open, lock_script, topbar
 from app.routes.base import BaseHandler
 
@@ -72,7 +72,7 @@ class BrowseRoutes(BaseHandler):
         if folders:
             items = "".join(render("browse/folder_item", dot=" dot" if d.name.startswith(".") else "",
                                    target=quote(rel_of(d), safe=""), title=escape(d.name, quote=True),
-                                   more_button=render("components/more_button"),
+                                   more_button=render("components/more_button"), cols=columns("—", "Dossier"),
                                    name_key=escape(d.name.casefold(), quote=True), name=escape(d.name),
                                    sort=sort_attrs(d, i))
                             for i, d in enumerate(folders))

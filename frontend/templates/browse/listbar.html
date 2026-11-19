@@ -1,6 +1,15 @@
 {# Barre de la liste : filtres par catégorie (à gauche, inchangés) et tri (à droite). #}
 <div class='listbar'>{{ filters }}
   <div class='sortbox'>
+    <label class='sortsel viewsel'><span>Affichage</span>
+      <select id='view' title='Mode d’affichage de ce dossier'>
+        <option value='large'>Grandes icônes</option>
+        <option value='medium'>Icônes moyennes</option>
+        <option value='small'>Petites icônes</option>
+        <option value='list'>Liste</option>
+        <option value='details'>Détails</option>
+      </select>
+    </label>
     <label class='sortsel'><span>Trier par</span>
       <select id='sort'>
         <option value='name'>Nom</option>

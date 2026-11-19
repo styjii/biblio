@@ -1,0 +1,28 @@
+{# Visionneuse d'images : retour à la liste, précédente / suivante, zoom. Animée par frontend/js/image/ (window.ICFG : liste des images du dossier). #}
+<main class='iv' id='iv'>
+  <div class='iv-bar'>
+    <a class='pill' id='iv-back' href='{{ folder_href }}' title='Retour à la liste (Échap)' aria-label='Retour à la liste'>{{ icon arrow_left 16 }}<span class='iv-lbl'>Liste</span></a>
+    <div class='iv-title'><div class='iv-name' id='iv-name'>{{ name }}</div><div class='sub' id='iv-count'>{{ pos }}</div></div>
+    <div class='iv-tools' role='toolbar' aria-label='Navigation et zoom'>
+      <button type='button' class='iv-btn' id='iv-prev' title='Image précédente (←)' aria-label='Image précédente'>{{ icon chevron_left 20 }}</button>
+      <button type='button' class='iv-btn' id='iv-next' title='Image suivante (→)' aria-label='Image suivante'>{{ icon chevron 20 }}</button>
+      <span class='iv-sep'></span>
+      <button type='button' class='iv-btn' id='iv-zout' title='Zoom arrière (−)' aria-label='Zoom arrière'>{{ icon zoom_out 20 }}</button>
+      <button type='button' class='iv-zoom' id='iv-zoom' title='Ajuster à l’écran (0) / taille réelle (1)' aria-label='Niveau de zoom : basculer entre ajusté et taille réelle'>100 %</button>
+      <button type='button' class='iv-btn' id='iv-zin' title='Zoom avant (+)' aria-label='Zoom avant'>{{ icon zoom_in 20 }}</button>
+      <button type='button' class='iv-btn' id='iv-fit' title='Ajuster à l’écran (0)' aria-label='Ajuster à l’écran'>{{ icon fit 20 }}</button>
+      <button type='button' class='iv-btn' id='iv-fs' title='Plein écran (F)' aria-label='Plein écran'>{{ icon expand 20 }}</button>
+    </div>
+  </div>
+  <div class='iv-stage' id='iv-stage' tabindex='0'>
+    <img id='iv-img' alt='{{ name }}' draggable='false'>
+    <button type='button' class='iv-nav prev' id='iv-nav-prev' aria-label='Image précédente'>{{ icon chevron_left 28 }}</button>
+    <button type='button' class='iv-nav next' id='iv-nav-next' aria-label='Image suivante'>{{ icon chevron 28 }}</button>
+    <div class='iv-msg' id='iv-loading' hidden>{{ icon loader 22 }}Chargement…</div>
+    <div class='iv-msg err' id='iv-error' hidden>Impossible d'afficher cette image (format non pris en charge ou fichier illisible).</div>
+  </div>
+  <p class='iv-hint'>
+    <kbd>←</kbd> <kbd>→</kbd> précédente / suivante · <kbd>+</kbd> <kbd>−</kbd> zoom · <kbd>0</kbd> ajuster · <kbd>1</kbd> taille réelle ·
+    <kbd>F</kbd> plein écran · <kbd>Échap</kbd> <kbd>L</kbd> retour à la liste · molette, double-clic, pincement et glisser pour zoomer et déplacer
+  </p>
+</main>

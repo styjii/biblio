@@ -21,7 +21,7 @@ FREQUENT_OPEN = {
     "pdf": ("/pdf", "file", "pdf"),
     "text": ("/view", "file", "text"),
     "web": ("/view", "globe", "web"),
-    "image": ("/raw", "image", "media"),
+    "image": ("/image", "image", "media"),
 }
 
 

@@ -98,7 +98,8 @@ class PlayerRoutes(BaseHandler):
 
     def serve_thumb(self, rel):
         p = config.paths.resolve(rel)
-        t = media.thumbnail(p) if p and p.is_file() and kind_of(p) == "video" else None
+        kind = kind_of(p) if p and p.is_file() else None
+        t = media.thumbnail(p) if kind == "video" else media.image_thumbnail(p) if kind == "image" else None
         if t is None:
             self.send_error(404)
             return

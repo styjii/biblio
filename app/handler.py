@@ -8,6 +8,7 @@ from app.routes.auth import AuthRoutes
 from app.routes.browse import BrowseRoutes
 from app.routes.dashboard import DashboardRoutes
 from app.routes.edit import EditRoutes
+from app.routes.gallery import GalleryRoutes
 from app.routes.home import HomeRoutes
 from app.routes.player import PlayerRoutes
 from app.routes.progress import ProgressRoutes
@@ -19,7 +20,7 @@ POSTS = ("/save", "/delete", "/rename", "/mkdir", "/progress", "/upload-auth", "
 DASH_POSTS = ("/dashboard/block", "/dashboard/unblock")
 
 
-class FileHandler(HomeRoutes, BrowseRoutes, ViewerRoutes, PlayerRoutes, ProgressRoutes, ServeRoutes, EditRoutes, UploadRoutes,
+class FileHandler(HomeRoutes, GalleryRoutes, BrowseRoutes, ViewerRoutes, PlayerRoutes, ProgressRoutes, ServeRoutes, EditRoutes, UploadRoutes,
                   AuthRoutes, DashboardRoutes):
     """Un gestionnaire = une famille de routes par module de `app/routes/`. Chacune hérite du socle HTTP
     `BaseHandler` (send_html, send_json…), ce qui permet à l'éditeur de connaître ces méthodes."""
@@ -58,6 +59,8 @@ class FileHandler(HomeRoutes, BrowseRoutes, ViewerRoutes, PlayerRoutes, Progress
                     self.end_headers()
                 else:
                     self.page_home()
+            elif path == "/image":
+                self.page_image(arg("f"))
             elif path == "/browse":
                 self.page_browse(arg("folder"))
             elif path == "/open":

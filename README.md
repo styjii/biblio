@@ -30,12 +30,13 @@ de compilation du front-end.
 | Domaine | Ce que fait Biblio |
 |---|---|
 | Accueil | Choix du dossier d'entrée (dossier courant et disques du `.env`), 5 fichiers fréquents, lecteur multimédia local (glisser-déposer, sans envoi au serveur) |
-| Navigation | Dossiers et fichiers en cartes, fil d'Ariane, recherche dans le dossier, filtres par catégorie, tri (nom, date, taille, durée, type), miniatures des vidéos |
+| Navigation | Dossiers et fichiers en cartes, fil d'Ariane, recherche dans le dossier, filtres par catégorie, modes d'affichage (grandes icônes, liste, détails…), tri (nom, date, taille, durée, type), miniatures des vidéos |
 | Texte et code | Lecture et édition avec CodeMirror, mode Vim, numéros de ligne, retour à la ligne, taille du texte réglable |
 | Markdown | Aperçu rendu dans le navigateur : sommaire, progression de lecture, réglages de lecture, copie du code, impression |
 | Pages web | Aperçu isolé (sandbox) des fichiers HTML, avec navigation entre les pages du dossier |
 | Vidéo | Lecteur complet : sous-titres, vitesse, mode cinéma, image dans l'image, liste de lecture du dossier, reprise de la position |
 | Audio | Lecteur avec liste de lecture, pochettes et tags, lecture aléatoire, répétition, touches multimédia du téléphone |
+| Images | Visionneuse interactive : zoom (boutons, clavier, molette, pincement), précédente / suivante, plein écran, retour à la liste |
 | PDF | Visionneuse pdf.js (ou lecteur du navigateur si pdf.js est absent) |
 | Fichiers | Création de fichiers et de dossiers, renommage, suppression, envoi de fichiers et de dossiers, téléchargement d'un dossier en ZIP |
 | Accès | Jeton d'accès dans le lien, cadenas protégé par mot de passe pour les actions d'écriture, mode lecture seule |
@@ -47,7 +48,7 @@ de compilation du front-end.
 - Python 3 récent (développé avec Python 3.13). Linux, macOS, Windows, et aussi Android via Termux.
 - Un navigateur moderne (Chrome, Firefox, Safari, Edge, Samsung Internet).
 - Facultatif :
-  - `ffmpeg` et `ffprobe` : miniatures et durées des vidéos, pochettes et tags audio. Sans eux, Biblio fonctionne,
+  - `ffmpeg` et `ffprobe` : miniatures des vidéos et des images, durées des vidéos, pochettes et tags audio. Sans eux, Biblio fonctionne,
     mais sans ces aperçus (Debian et Ubuntu : `sudo apt install ffmpeg`).
   - `node` : uniquement pour que les tests vérifient que les scripts assemblés sont du JavaScript valide.
 
@@ -220,8 +221,33 @@ Recommandations :
 - **Filtres** par catégorie de fichiers, et interrupteur pour afficher ou masquer les fichiers cachés.
 - **Tri** par nom (ordre naturel), date, taille, durée ou type, croissant ou décroissant. Le choix est mémorisé dans le
   navigateur. Les valeurs inconnues passent toujours en dernier.
+- **Affichage** : le sélecteur « Affichage », à côté du tri, change la présentation de la liste : *grandes icônes*
+  (vignettes 16/9), *icônes moyennes* (cartes, par défaut), *petites icônes* (tuiles carrées), *liste* (lignes compactes
+  sur plusieurs colonnes) et *détails* (tableau : nom, modifié le, taille, type). Les images ont leur miniature (ffmpeg)
+  dans tous les modes sauf « moyennes ». Le choix est un **réglage global** : il s'applique à tous les dossiers et
+  sous-dossiers parcourus, reste en place quand on navigue, et est mémorisé dans le navigateur (les autres onglets le
+  suivent).
 - **Menu d'actions** de chaque élément : ouvrir, éditer, renommer, supprimer, télécharger. Un dossier se télécharge en
   archive ZIP construite au fil de l'envoi (le `.env` en est exclu, les raccourcis vers des dossiers ne sont pas suivis).
+
+### Visionneuse d'images (`/image`)
+
+Un clic sur une image de la liste l'ouvre dans la visionneuse. Elle parcourt les images du dossier dans l'ordre de la
+liste (tri choisi, fichiers cachés seulement s'ils sont affichés) ; l'adresse suit l'image affichée.
+
+| Action | Bouton | Raccourci clavier |
+|---|---|---|
+| Retour à la liste | « Liste » | `Échap`, `L` ou `Retour arrière` |
+| Image précédente / suivante | flèches de la barre ou de l'image | `←` `P` `Page ↑` / `→` `N` `Page ↓` |
+| Première / dernière image | — | `Début` / `Fin` |
+| Zoom avant / arrière | loupes + et − | `+` / `-` |
+| Ajusté à l'écran | cadre, ou clic sur le pourcentage | `0` |
+| Taille réelle (100 %) | clic sur le pourcentage (si l'image est plus grande) | `1` |
+| Plein écran | flèches | `F` (`Échap` le quitte) |
+
+Aussi : molette (zoom sous le curseur), double-clic (ajusté ↔ 100 %), glisser pour déplacer, pincement et balayage
+horizontal au doigt. Une image illisible affiche un message. Les miniatures des images viennent de `/thumb` (ffmpeg,
+mises en cache) ; sans ffmpeg, l'icône du type reste affichée.
 
 ### Lecture et édition de texte
 
@@ -398,6 +424,7 @@ tests/                    tests
 | `/view`, `/edit` | Lecture et édition de texte |
 | `/preview` | Aperçu Markdown ou page web |
 | `/watch`, `/listen` | Lecteurs vidéo et audio |
+| `/image` | Visionneuse d'images (`?f=…`) |
 | `/pdf`, `/docs/…` | PDF |
 | `/raw`, `/zip` | Contenu brut, téléchargement, archive d'un dossier |
 | `/s/<jeton>/…` | Pages web servies en bac à sable |
@@ -415,7 +442,7 @@ tests/                    tests
 | `cli.py` | options de la ligne de commande, configuration, démarrage |
 | `config.py` | réglages (dossiers d'entrée : `Mount` et `Library`, jeton, mots de passe, limites, chemins), sécurité (`PasswordGuard`, `TicketStore`, `SessionStore`, `PathGuard`) |
 | `handler.py` | `FileHandler` : assemble les routes, répartit GET / POST |
-| `routes/` | une famille de routes par fichier : `home`, `browse`, `viewer`, `player`, `progress`, `serve`, `edit`, `upload`, `auth`, `dashboard` (+ `base` : envoi des réponses, cookies) |
+| `routes/` | une famille de routes par fichier : `home`, `browse`, `gallery`, `viewer`, `player`, `progress`, `serve`, `edit`, `upload`, `auth`, `dashboard` (+ `base` : envoi des réponses, cookies) |
 | `views/` | briques HTML : `layout` (page, barre du haut, messages), `cards` (cartes de fichiers), `home`, `dashboard` |
 | `devices.py` | appareils connectés, blocage par IP, historique d'activité |
 | `playback.py` | dernière position de lecture de chaque appareil |
@@ -462,7 +489,7 @@ supplémentaire. **Après une modification du front-end, relancer le serveur.**
 
 Stockées dans le `localStorage` : tri de la liste (`fl:sort`), taille du texte (`fl:fs`), retour à la ligne (`fl:wrap`),
 numéros de ligne (`fl:num`), mode Vim (`fl:vim`), barre de touches (`fl:keys`), affichage des fichiers cachés
-(`fl:hidden`), thème clair ou sombre (`theme`).
+(`fl:hidden`), mode d'affichage de la liste (`fl:view`), thème clair ou sombre (`theme`).
 
 ## Développement
 

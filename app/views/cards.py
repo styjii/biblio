@@ -41,7 +41,7 @@ def group_of(kind):
             "image": "media", "audio": "media", "binary": "other"}[kind]
 
 
-def _stat(p):
+def stat_of(p):
     """-> (taille en octets, date de modification en secondes) ; (0, 0) si illisible."""
     try:
         st = p.stat()
@@ -60,8 +60,13 @@ def _size_of(p):
 def sort_attrs(p, order):
     """Attributs data-* lus par le tri de la liste (frontend/js/browse/00-tri.js) : rang par nom (ordre naturel du serveur),
     octets, date, extension."""
-    nbytes, mtime = _stat(p)
+    nbytes, mtime = stat_of(p)
     return f"data-order='{order}' data-bytes='{nbytes}' data-mtime='{mtime}' data-ext='{escape(p.suffix[1:].casefold(), quote=True)}'"
+
+
+def columns(size, kind_label):
+    """Colonnes du mode « Détails » (date remplie par le navigateur d'après data-mtime, taille, type) ; masquées dans les autres modes."""
+    return render("components/cols", size=size, type=escape(kind_label))
 
 
 def file_card(p, kind, order=0):
@@ -71,7 +76,7 @@ def file_card(p, kind, order=0):
     q = quote(rel_of(p), safe="")
     size = _size_of(p)
     href = {"text": f"/view?f={q}", "web": f"/view?f={q}", "pdf": f"/pdf?f={q}",
-            "image": f"/raw?f={q}", "audio": f"/listen?f={q}", "binary": f"/raw?dl=1&f={q}"}[kind]
+            "image": f"/image?f={q}", "audio": f"/listen?f={q}", "binary": f"/raw?dl=1&f={q}"}[kind]
     direct = kind in ("pdf", "image", "audio")
     ext = p.suffix[1:].upper() if p.suffix else "FICHIER"
     has_menu = kind in ("pdf", "image", "audio", "binary")
@@ -83,6 +88,8 @@ def file_card(p, kind, order=0):
                   title=escape(p.name, quote=True), size=size, ext=ext,
                   name_key=escape(p.name.casefold(), quote=True),
                   icon_svg=icon(ic, 22), name=escape(p.name),
+                  thumb=render("components/file_thumb", q=q) if kind == "image" else "",
+                  cols=columns(size, ext),
                   right=render("components/more_button" if has_menu else "components/go_chevron"))
 
 
@@ -93,6 +100,7 @@ def video_card(p, order=0):
                   q=q, key=media.key(p), title=escape(p.name, quote=True), sort=sort_attrs(p, order),
                   size=_size_of(p), ext=p.suffix[1:].upper(),
                   name_key=escape(p.name.casefold(), quote=True),
+                  cols=columns(_size_of(p), p.suffix[1:].upper()),
                   more_button=render("components/more_button"), name=escape(p.stem))
 
 
