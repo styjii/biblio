@@ -169,22 +169,31 @@ scene(70, false); advance(700); video.emit('pause'); video.emit('timeupdate'); a
 out.jamaisDePauseForcee = outcome();
 
 // ---------- plein écran : la page retrouve sa position de défilement ----------
-// Le navigateur ramène le défilement dans les limites quand la page raccourcit (le lecteur sort du flux en plein écran), sans le rétablir à la sortie.
+// Le navigateur ramène le défilement dans les limites quand la page raccourcit (le lecteur sort du flux en plein écran), puis, sur mobile, le
+// remet à zéro APRÈS l'événement de sortie (barres et fenêtre qui reprennent leur taille) : la position doit être rétablie et gardée un instant.
 const root = doc.documentElement;
 const scrolled = (y) => { page.y = y; win.emit('scroll'); };
 const raccourcit = () => { page.y = 0; };                                        // recadrage du navigateur, sans l'événement « scroll » du lecteur
+const cycle = () => { pressF(); enter(); raccourcit(); advance(10); leave(); };    // entrée, recadrage, sortie
 scene(120, true); page.calls.length = 0; scrolled(1400); advance(1000);
 pressF(); out.pageMaintenue = root.style.minHeight; enter(); raccourcit(); advance(10);
 out.pendantPleinEcran = {y: page.y, minHeight: root.style.minHeight, appels: page.calls.length};
 leave(); out.sortieImmediate = {y: page.y, appels: [...page.calls]};
-advance(50); out.sortieApres = {y: page.y, minHeight: root.style.minHeight, appels: page.calls.length};
+advance(50); out.sortieApres = {y: page.y, minHeight: root.style.minHeight, appels: page.calls.length};   // hauteur gardée tant que la surveillance dure
+advance(300); scrolled(0); out.remiseAZeroTardive = {y: page.y, appels: page.calls.length};         // le navigateur remet à zéro après coup : annulé
+advance(300); win.emit('resize'); page.y = 0; win.emit('resize'); out.apresRedimensionnement = page.y;
+advance(2000); out.finDeSurveillance = {minHeight: root.style.minHeight};
+const appels = page.calls.length; scrolled(0); out.apresSurveillance = {y: page.y, appels: page.calls.length - appels};   // plus rien n'est forcé ensuite
 
-scrolled(900); advance(1000); pressF(); enter(); leave(); advance(50);            // la page n'a pas bougé : aucun défilement
-out.sansChangement = {y: page.y, appels: page.calls.length};
+scrolled(900); advance(1000); cycle(); win.emit('touchstart'); scrolled(300); advance(10);    // l'utilisateur fait défiler : on ne lutte pas contre lui
+out.utilisateurDefile = {y: page.y, minHeight: root.style.minHeight}; advance(2000);
+
+scrolled(900); advance(1000); const avant = page.calls.length; pressF(); enter(); leave(); advance(2000);     // la page n'a pas bougé : aucun défilement
+out.sansChangement = {y: page.y, appels: page.calls.length - avant};
 
 scrolled(700); advance(1000); const appelsAvant = page.calls.length;              // plein écran natif d'iOS : position relevée dans l'historique
 doc.fullscreenElement = null; video.webkitDisplayingFullscreen = true; page.y = 0; video.emit('webkitbeginfullscreen');
-video.webkitDisplayingFullscreen = false; video.emit('webkitendfullscreen'); advance(50);
+video.webkitDisplayingFullscreen = false; video.emit('webkitendfullscreen'); advance(2000);
 out.natifDefilement = {y: page.y, appels: page.calls.length - appelsAvant};
 
 scrolled(500); advance(1000); video.webkitDisplayingFullscreen = false; pressF();   // plein écran refusé : la hauteur de la page est rendue

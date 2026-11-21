@@ -191,10 +191,20 @@ class LecteurLocalTests(unittest.TestCase):
 
     def test_la_page_retrouve_sa_position_a_la_sortie_du_plein_ecran(self):
         self.assertEqual(self.r["sortieImmediate"], {"y": 1400, "appels": [[0, 1400]]})     # tout de suite, sans attendre
-        self.assertEqual(self.r["sortieApres"], {"y": 1400, "minHeight": "", "appels": 1})  # une seule correction, hauteur rendue
+        self.assertEqual(self.r["sortieApres"], {"y": 1400, "minHeight": "3000px", "appels": 1})   # une seule correction ; hauteur gardée pendant la surveillance
+
+    def test_remise_a_zero_tardive_du_navigateur_annulee(self):
+        """Cas d'un mobile (Samsung Internet) : la page est remise en haut après l'événement de sortie."""
+        self.assertEqual(self.r["remiseAZeroTardive"], {"y": 1400, "appels": 2})
+        self.assertEqual(self.r["apresRedimensionnement"], 1400)        # y compris quand la fenêtre change de taille
+        self.assertEqual(self.r["finDeSurveillance"], {"minHeight": ""})   # la hauteur de la page est rendue
+        self.assertEqual(self.r["apresSurveillance"], {"y": 0, "appels": 0})   # au-delà de 1,5 s, plus rien n'est forcé
+
+    def test_l_utilisateur_qui_fait_defiler_garde_la_main(self):
+        self.assertEqual(self.r["utilisateurDefile"], {"y": 300, "minHeight": ""})
 
     def test_aucun_defilement_si_la_page_n_a_pas_bouge(self):
-        self.assertEqual(self.r["sansChangement"], {"y": 900, "appels": 1})
+        self.assertEqual(self.r["sansChangement"], {"y": 900, "appels": 0})
 
     def test_plein_ecran_natif_ios_et_plein_ecran_refuse(self):
         self.assertEqual(self.r["natifDefilement"], {"y": 700, "appels": 1})
