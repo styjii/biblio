@@ -90,6 +90,9 @@ class VisionneuseJsTests(unittest.TestCase):
 
     def test_mode_suivi_par_les_autres_onglets_et_valeurs_alterees(self):
         self.assertEqual(self.r["autreOnglet"]["view"], "list")
+        self.assertEqual(self.r["pageChargee"], "medium")                       # chargement normal : rien à resynchroniser
+        self.assertEqual(self.r["pageRestauree"], {"view": "details", "select": "details", "saved": "details"})   # Retour : mode choisi entre-temps
+        self.assertEqual(self.r["pageRestaureeDefaut"]["view"], "medium")
         self.assertEqual(self.r["autreCle"], "list")                     # une autre clé du navigateur est ignorée
         self.assertEqual(self.r["valeurInconnue"]["view"], "medium")
         self.assertEqual(self.r["valeurHostile"]["view"], "medium")
@@ -183,6 +186,23 @@ class GalerieServerTests(unittest.TestCase):
         self.assertIn("<main id='listing'>", page)
         self.assertIn("localStorage.getItem('fl:view')", page)                # mode appliqué avant l'affichage de la liste
         self.assertIn("class ViewMode", page)
+
+    def test_mode_applique_avant_le_contenu_de_la_liste(self):
+        """Le mode est posé avant que le navigateur lise la première carte : pas d'affichage provisoire en « Icônes moyennes »."""
+        (Path(self.tmp.name) / "lib" / "sous" / "y.png").write_bytes(png())
+        early = "dataset.view=['large','small','list','details'].includes(v)?v:'medium'"
+        for url in ("/browse", "/browse?folder=sous"):                        # racine et sous-dossier (retour au dossier précédent)
+            _, _, page = self.get(url)
+            main = page.index("<main id='listing'>")
+            self.assertTrue(page.startswith("<script>", main + len("<main id='listing'>")))   # premier enfant de <main>
+            self.assertEqual(page.index(early), page.index(early, main))      # dans <main>, avant son contenu
+            self.assertLess(page.index(early), page.index("<section", main))  # avant les dossiers et les fichiers
+            self.assertLess(page.index(early), page.index("class='listbar'"))
+            self.assertNotIn("getElementById('listing').dataset.view=v", page)   # l'ancien script, placé après la liste
+            # le sélecteur reflète le mode dès son affichage (sinon il montre sa première option jusqu'au chargement des scripts)
+            sync = page.index("s.value=document.getElementById('listing').dataset.view")
+            self.assertLess(page.index("id='view'"), sync)
+            self.assertLess(sync, page.index("<section", main))
 
     def test_colonnes_du_mode_details_et_miniatures(self):
         _, _, page = self.get("/browse")

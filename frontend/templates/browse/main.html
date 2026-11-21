@@ -1,3 +1,2 @@
-{# Le mode d'affichage est un réglage global (mémorisé sous « fl:view ») : le script l'applique avant le premier affichage de la liste, sans à-coup, dans chaque dossier. #}
-<main id='listing'>{{ content }}</main>
-<script>try{const v=localStorage.getItem('fl:view');if(v)document.getElementById('listing').dataset.view=v}catch(e){}</script>
+{# Le mode d'affichage est un réglage global (mémorisé sous « fl:view »). Le script est le PREMIER enfant de <main> : il s'exécute avant que le navigateur lise la moindre carte de la liste, donc aucune image du dossier n'est affichée dans un mode provisoire (avant, il suivait la liste et un affichage progressif la montrait d'abord en « Icônes moyennes »). Valeurs valides : voir ViewMode.MODES (frontend/js/browse/01-modes-d-affichage.js). #}
+<main id='listing'><script>{const m=document.currentScript.parentElement;let v='';try{v=localStorage.getItem('fl:view')}catch(e){}m.dataset.view=['large','small','list','details'].includes(v)?v:'medium'}</script>{{ content }}</main>

@@ -120,6 +120,12 @@ const out = {};
   const suivi = page();
   win.emit('storage', {key: 'fl:view', newValue: 'list'}); out.autreOnglet = mode(suivi);
   win.emit('storage', {key: 'autre', newValue: 'small'}); out.autreCle = mode(suivi).view;
+  // retour arrière : la page restaurée du cache de navigation (aucun événement « storage » reçu) reprend le mode choisi entre-temps
+  const restauree = page();
+  store['fl:view'] = 'details';
+  win.emit('pageshow', {persisted: false}); out.pageChargee = mode(restauree).view;        // chargement normal : rien à resynchroniser
+  win.emit('pageshow', {persisted: true}); out.pageRestauree = mode(restauree);
+  delete store['fl:view']; win.emit('pageshow', {persisted: true}); out.pageRestaureeDefaut = mode(restauree);
   // stockage altéré : retombe sur le mode par défaut
   store['fl:view'] = 'pirate'; out.valeurInconnue = mode(page());
   store['fl:view'] = '<script>'; out.valeurHostile = mode(page());
