@@ -1,5 +1,10 @@
 .home-head{display:flex; flex-direction:column; gap:2px}
 .home-title{margin:0; font-size:24px; letter-spacing:-.01em}
+.home-jump{align-self:flex-start; margin-top:10px}
+
+/* Section du lecteur : amenée sous la barre fixe (--tb) avec un peu d'air quand on y accède par le lien « #lecteur » ou par scrollIntoView ;
+   aucun scroll-snap : la page reste libre de défiler partout. */
+#lecteur{scroll-margin-top:calc(var(--tb) + 12px)}
 .item.root .rtags{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px}
 .item.root .rtags:empty{display:none}
 .rtag{font-size:11.5px; font-weight:600; padding:1px 8px; border-radius:99px; background:var(--gray-soft); color:var(--muted)}
@@ -33,3 +38,22 @@ button.chip:hover{background:var(--accent-soft); border-color:var(--accent); col
 }
 .mp-main:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:9px}
 .row .abtn{align-self:center; flex-shrink:0}
+
+/* Modes Vidéo / Audio : deux onglets (un seul lecteur affiché à la fois) */
+.mp-panel{display:flex; flex-direction:column; gap:12px}
+.mp-tabs{display:inline-flex; align-self:flex-start; gap:4px; padding:4px; border-radius:14px; background:var(--gray-soft); border:1px solid var(--border)}
+.mp-tab{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:40px; padding:0 14px; border:0; border-radius:10px;
+  background:none; color:var(--muted); font:inherit; font-size:14.5px; font-weight:600; cursor:pointer;
+  transition:background .15s,color .15s; -webkit-tap-highlight-color:transparent;
+}
+.mp-tab:hover{color:var(--text)}
+.mp-tab[aria-selected='true']{background:var(--surface); color:var(--accent); box-shadow:var(--shadow)}
+.mp-tab:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.mp-tab .n{min-width:20px; padding:0 6px; border-radius:99px; background:var(--gray-soft); color:var(--muted); font-size:12px; font-weight:700; line-height:20px; text-align:center}
+.mp-tab[aria-selected='true'] .n{background:var(--accent-soft); color:var(--accent)}
+@media(max-width:520px){
+  .mp-tabs{align-self:stretch}
+  .mp-tab{flex:1}
+}
+@media(prefers-reduced-motion:reduce){.mp-tab{transition:none}}

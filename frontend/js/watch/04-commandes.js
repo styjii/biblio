@@ -59,8 +59,9 @@ class VideoPlayer {
     this.#loadInPlace(target).catch(() => this.#leaveTo(target)).finally(() => { this.#switching = false; });
   }
 
-  /** Lecteur de l'accueil : lit le fichier local `target` dans le même lecteur (mêmes étapes que #loadInPlace, sans page à lire). */
-  #loadLocal(target) {
+  /** Lecteur de l'accueil : lit le fichier local `target` dans le même lecteur (mêmes étapes que #loadInPlace, sans page à lire).
+      `restore` ({time, playing}) : retour à un mode mis de côté, la lecture reprend là où elle en était, en lecture ou en pause comme avant. */
+  #loadLocal(target, restore = null) {
     const item = items[target];
     if (!item) return;
     this.#resume.leave();
@@ -69,10 +70,20 @@ class VideoPlayer {
     this.#guard.reset();
     this.#resume.reset();
     this.#order.restore(this.#shuffle);
+    video.autoplay = restore ? restore.playing : true;    // sans cela, la vidéo repartirait seule même si elle était en pause
     video.src = url;
     this.#ui.reload();
-    play();
+    if (restore) this.#restorePosition(restore); else play();
     this.#updateMediaTitle(item.f);
+  }
+
+  /** Rejoint la position `time` dès que la durée est connue (ou tout de suite) ; relance la lecture si elle était en cours. */
+  #restorePosition({time, playing}) {
+    const apply = () => {
+      if (time > 0 && Number.isFinite(video.duration)) video.currentTime = Math.min(time, Math.max(0, video.duration - END_GUARD));
+      if (playing) play();
+    };
+    if (video.readyState >= 1) apply(); else video.addEventListener('loadedmetadata', apply, {once: true});
   }
 
   /* ----- lecteur local (accueil) : appelé par frontend/js/home/ et par la liste d'attente ----- */
@@ -85,6 +96,21 @@ class VideoPlayer {
     if (wasEmpty) this.#goto(0);
     else { this.#order.save(); this.#local.render(); }
     return result;
+  }
+
+  /** Accueil : passe du mode Vidéo au mode Audio, ou l'inverse. Le lecteur reste le même (même balise <video>, jamais recréée) : la file, la position et
+      l'état lecture/pause du mode quitté sont mis de côté (la lecture est interrompue, on n'entend jamais les deux) et rétablis au retour.
+      Volume, mode muet et vitesse sont ceux du lecteur et ne changent pas d'un mode à l'autre. -> false si rien ne change. */
+  setLocalMode(mode) {
+    if (!local || !LocalFiles.MODES.includes(mode) || mode === this.#local.mode) return false;
+    const state = {time: video.ended ? 0 : video.currentTime || 0, playing: !video.paused && !video.ended};
+    this.#resume.leave();
+    video.pause();
+    const parked = this.#local.swap(mode, state);
+    if (!parked) { this.clearLocal(); return true; }       // rien à lire dans ce mode : lecteur vide, zone de dépôt affichée
+    this.#order.rebuild(this.#shuffle);
+    this.#loadLocal(index, {time: parked.time, playing: parked.playing});
+    return true;
   }
 
   playLocal(target) {
@@ -366,6 +392,7 @@ if (local) {                                               // interface proposé
   window.BiblioLocal = {
     add: (files) => player.addLocal(files),
     play: (target) => player.playLocal(target),
+    setMode: (mode) => player.setLocalMode(mode),
     remove: (target) => player.removeLocal(target),
     clear: () => player.clearLocal(),
   };

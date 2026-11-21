@@ -79,7 +79,7 @@ function makeWorld({shuffle = false, startPaused = false} = {}) {
   const win = {};
   listeners(win);
   const ctx = {
-    window: win, document: doc, navigator: {onLine: true}, location: {href: '/watch?f=a.mp4'}, innerWidth: 500,
+    window: win, document: doc, navigator: {onLine: true}, location: {href: '/watch?f=a.mp4'}, innerWidth: 500, scrollX: 0, scrollY: 0, scrollTo() {},
     setTimeout: setTimeoutFake, clearTimeout: clearTimeoutFake, Date: {now: () => now}, JSON, Math, Number, Object, Array, Map, Promise, String, Set,
     localStorage: {getItem: () => null, setItem() {}, removeItem() {}}, sessionStorage: {getItem: () => null, setItem() {}},
     matchMedia: () => ({matches: false}), requestAnimationFrame: (fn) => setTimeoutFake(fn, 16), screen: {},

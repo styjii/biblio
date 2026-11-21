@@ -265,7 +265,7 @@ class HomeServerTests(unittest.TestCase):
 
     def test_accueil_a_les_trois_blocs(self):
         _, _, home = self.get("/")
-        for marker in ("Dossier d'entrée", "Fichiers fréquents", "id='mp-zone'", "id='mp-input'", "id='mp-drop'"):
+        for marker in ("Dossier d'entrée", "Fichiers fréquents", "id='mp-zone'", "id='mp-input'", "id='mp-drop'", "id='lecteur'", "id='mp-tab-video'", "id='mp-tab-audio'"):
             self.assertIn(marker, home)
         self.assertIn("window.BiblioLocal", home)           # le lecteur local est le script de la page de lecture
 

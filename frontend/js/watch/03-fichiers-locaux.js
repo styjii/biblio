@@ -1,8 +1,11 @@
 /** Lecteur de l'accueil : la liste des fichiers vidéo et audio de l'appareil (choisis ou déposés) et son affichage.
     C'est le même lecteur que la page de lecture (PlayerUI, VideoPlayer) : seule la source change. Le navigateur lit le
     fichier directement depuis le disque (URL locale créée à la demande), sans le copier ni l'envoyer au serveur.
-    Les éléments de `items` valent ici {f: nom, u: URL locale (une seule à la fois), file, kind: 'video' | 'audio'}. */
+    Les éléments de `items` valent ici {f: nom, u: URL locale (une seule à la fois), file, kind: 'video' | 'audio'}.
+    Deux modes, Vidéo et Audio : `items` ne contient que les fichiers du mode affiché. Le lecteur étant unique, la file de l'autre
+    mode est mise de côté (avec sa position et son état lecture/pause) et rétablie au retour (voir swap). */
 class LocalFiles {
+  static MODES = ['video', 'audio'];
   static VIDEO_EXT = new Set(['mp4', 'm4v', 'webm', 'mkv', 'mov', 'avi', 'ogv', 'ts', '3gp']);
   static AUDIO_EXT = new Set(['mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg', 'oga', 'opus', 'mka', 'weba']);
   /** Image affichée à la place de la vidéo pour un son. */
@@ -13,10 +16,22 @@ class LocalFiles {
 
   #host;
   #url = null;
+  #mode = 'video';
+  #parked = {video: null, audio: null};                   // file du mode qui n'est pas affiché : {items, index, time, playing}
 
   constructor(host) {
     this.#host = host;
     this.render();
+  }
+
+  get mode() { return this.#mode; }
+
+  static other(mode) { return mode === 'video' ? 'audio' : 'video'; }
+
+  /** Nombre de fichiers de chaque mode (celui qui est affiché et celui qui est mis de côté). */
+  get counts() {
+    const other = LocalFiles.other(this.#mode);
+    return {[this.#mode]: items.length, [other]: this.#parked[other]?.items.length ?? 0};
   }
 
   static kindOf(file) {
@@ -38,16 +53,32 @@ class LocalFiles {
     return `${unit === 0 || value >= 100 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`.replace('.', ',');
   }
 
-  /** Ajoute les fichiers lisibles à la liste. -> {accepted, rejected} (rejetés : ni vidéo ni audio). */
+  /** Ajoute à la liste les fichiers du mode affiché. -> {mode, accepted, rejected, other}
+      (`other` : fichiers de l'autre mode, laissés de côté ; `rejected` : ni vidéo ni audio). */
   add(files) {
     let accepted = 0;
     let rejected = 0;
+    let other = 0;
     for (const file of files) {
       const kind = LocalFiles.kindOf(file);
-      if (kind) { items.push({f: file.name, u: '', file, kind}); accepted += 1; } else rejected += 1;
+      if (kind === this.#mode) { items.push({f: file.name, u: '', file, kind}); accepted += 1; } else if (kind) other += 1; else rejected += 1;
     }
     this.render();
-    return {accepted, rejected};
+    return {mode: this.#mode, accepted, rejected, other};
+  }
+
+  /** Change de mode : la file du mode quitté est mise de côté avec `state` ({time, playing}), celle de `mode` reprend.
+      -> ce qui avait été mis de côté pour `mode` (ou null : rien à lire). L'affichage est rafraîchi par l'appelant. */
+  swap(mode, state) {
+    this.#parked[this.#mode] = items.length ? {items: items.splice(0), index, ...state} : null;
+    this.#parked[this.#mode]?.items.forEach((item) => { item.u = ''; });     // l'URL locale est libérée ci-dessous
+    this.#release();
+    this.#mode = mode;
+    const next = this.#parked[mode];
+    this.#parked[mode] = null;
+    index = next?.index ?? 0;
+    if (next) items.push(...next.items);
+    return next;
   }
 
   /** Prépare la lecture de `items[target]` : libère l'URL précédente, en crée une nouvelle. -> l'URL à donner au lecteur. */
@@ -88,7 +119,7 @@ class LocalFiles {
     $('list-pos').textContent = `${current ? index + 1 : 0} / ${items.length}`;
     const list = $('mp-list');
     list.replaceChildren(...items.map((item, i) => this.#row(item, i)));
-    document.dispatchEvent(new CustomEvent('biblio:local', {detail: {count: items.length}}));
+    document.dispatchEvent(new CustomEvent('biblio:local', {detail: {count: items.length, mode: this.#mode, counts: this.counts}}));
   }
 
   #row(item, i) {

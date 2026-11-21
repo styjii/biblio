@@ -111,14 +111,17 @@ class PlayerUI {
   }
 
   async toggleFullscreen() {
+    fullscreenScroll.expect();                           // position de la page retenue : elle doit être retrouvée à la sortie (03-defilement-plein-ecran.js)
+    fullscreenKeeper.expect();                           // état d'avant la transition, rétabli si le navigateur y perd la position ou la lecture (03-plein-ecran.js)
     const active = document.fullscreenElement ?? document.webkitFullscreenElement;
-    if (active) { (document.exitFullscreen ?? document.webkitExitFullscreen)?.call(document); return; }
     try {
-      if (this.#box.requestFullscreen) {
-        await this.#box.requestFullscreen({navigationUI: 'hide'});
-      } else if (this.#box.webkitRequestFullscreen) this.#box.webkitRequestFullscreen();
-      else video.webkitEnterFullscreen?.();              // iPhone : plein écran natif de la vidéo (sans nos commandes)
-    } catch { /* plein écran refusé : sans conséquence */ }
+      if (active) await (document.exitFullscreen ?? document.webkitExitFullscreen)?.call(document);
+      else if (video.webkitDisplayingFullscreen) video.webkitExitFullscreen?.();         // plein écran natif d'iPhone
+      else if (this.#box.requestFullscreen) await this.#box.requestFullscreen({navigationUI: 'hide'});
+      else if (this.#box.webkitRequestFullscreen) this.#box.webkitRequestFullscreen();
+      else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();               // iPhone : plein écran natif de la vidéo (sans nos commandes)
+      else say('Plein écran non disponible sur ce navigateur.');
+    } catch { /* plein écran refusé ou déjà fermé : sans conséquence */ }
   }
 
   get #fullscreen() { return (document.fullscreenElement ?? document.webkitFullscreenElement) === this.#box; }

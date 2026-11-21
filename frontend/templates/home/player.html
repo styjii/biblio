@@ -1,27 +1,33 @@
-{# Lecteur multimédia local : même lecteur que la page de lecture vidéo (gabarit player/video_box, script frontend/js/watch/), alimenté par des fichiers de l'appareil lus sur place, sans copie sur le serveur. Tant qu'aucun fichier n'est choisi, seule la zone de dépôt est visible. #}
+{# Lecteur multimédia local : même lecteur que la page de lecture vidéo (gabarit player/video_box, script frontend/js/watch/), alimenté par des fichiers de l'appareil lus sur place, sans copie sur le serveur. Deux modes, Vidéo et Audio (onglets) : un seul est affiché à la fois ; l'autre garde sa file et sa position (voir LocalFiles.swap). Tant qu'aucun fichier n'est choisi dans le mode affiché, seule la zone de dépôt est visible. Les textes du mode (titre, bouton, types acceptés) sont mis à jour par frontend/js/home/01-selection-de-fichiers.js. #}
 <div class='mp' id='mp-zone'>
-  <div class='mp-drop' id='mp-drop' role='button' tabindex='0' aria-label='Choisir ou déposer un fichier vidéo ou audio'>
-    <span class='ico media'>{{ icon upload 26 }}</span>
-    <div class='mp-drop-title'>Glisse une vidéo ou un son ici</div>
-    <div class='sub'>ou</div>
-    <button type='button' class='pill primary' id='mp-pick'>{{ icon play 16 }}Choisir des fichiers</button>
-    <div class='sub'>Lecture directe depuis cet appareil : rien n'est copié ni envoyé au serveur.</div>
+  <div class='mp-tabs' id='mp-tabs' role='tablist' aria-label='Type de média'>
+    <button type='button' class='mp-tab' id='mp-tab-video' role='tab' data-mode='video' aria-selected='true' aria-controls='mp-panel' tabindex='0'>{{ icon film 18 }}<span>Vidéo</span><b class='n' id='mp-n-video'>0</b></button>
+    <button type='button' class='mp-tab' id='mp-tab-audio' role='tab' data-mode='audio' aria-selected='false' aria-controls='mp-panel' tabindex='-1'>{{ icon music 18 }}<span>Audio</span><b class='n' id='mp-n-audio'>0</b></button>
   </div>
-  <div class='mp-error' id='mp-error' role='alert' hidden></div>
-  <div class='watch' id='watch' hidden>
-    <div class='dock' id='dock'>
-      {{ box }}
-      <section class='info'>
-        <h1 class='vtitle'></h1>
-        <div class='chips'>
-          <span class='chip muted' id='mp-meta'></span>
-          <button class='chip' type='button' id='mp-add'>{{ icon plus 16 }}Ajouter des fichiers</button>
-          <button class='chip' type='button' id='mp-clear'>{{ icon close 16 }}Vider la liste</button>
-        </div>
-        {{ hint }}
-      </section>
+  <div class='mp-panel' id='mp-panel' role='tabpanel' aria-labelledby='mp-tab-video'>
+    <div class='mp-drop' id='mp-drop' role='button' tabindex='0' aria-label='Choisir ou déposer un fichier vidéo'>
+      <span class='ico media'>{{ icon upload 26 }}</span>
+      <div class='mp-drop-title' id='mp-drop-title'>Glisse une vidéo ici</div>
+      <div class='sub'>ou</div>
+      <button type='button' class='pill primary' id='mp-pick'>{{ icon play 16 }}<span id='mp-pick-label'>Choisir des vidéos</span></button>
+      <div class='sub'>Lecture directe depuis cet appareil : rien n'est copié ni envoyé au serveur.</div>
     </div>
-    <aside class='next'><h2>File d'attente <span class='cnt' id='list-pos'>0 / 0</span></h2><div class='list' id='mp-list'></div></aside>
+    <div class='mp-error' id='mp-error' role='alert' hidden></div>
+    <div class='watch' id='watch' hidden>
+      <div class='dock' id='dock'>
+        {{ box }}
+        <section class='info'>
+          <h1 class='vtitle'></h1>
+          <div class='chips'>
+            <span class='chip muted' id='mp-meta'></span>
+            <button class='chip' type='button' id='mp-add'>{{ icon plus 16 }}Ajouter des fichiers</button>
+            <button class='chip' type='button' id='mp-clear'>{{ icon close 16 }}Vider la liste</button>
+          </div>
+          {{ hint }}
+        </section>
+      </div>
+      <aside class='next'><h2>File d'attente <span class='cnt' id='list-pos'>0 / 0</span></h2><div class='list' id='mp-list'></div></aside>
+    </div>
+    <input type='file' id='mp-input' accept='video/*,.mkv,.avi,.mov,.ts,.m4v,.ogv,.3gp' multiple hidden>
   </div>
-  <input type='file' id='mp-input' accept='video/*,audio/*,.mkv,.mka,.flac,.m4a,.opus,.ogg,.oga,.wav,.avi,.mov,.ts' multiple hidden>
 </div>
